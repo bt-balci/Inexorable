@@ -21,6 +21,9 @@
     <ClCompile Include="x86.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Vm.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h">

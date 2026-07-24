@@ -8,7 +8,7 @@
 #include "x86.h"
 #include "Vm.h"
 
-CATALYST_VIRTUAL_CPU VirtualProcessors[CONFIG_CPU_COUNT];
+CATALYST_VIRTUAL_CPU VirtualProcessors[CONFIG_CPU_COUNT] = {0};
 
 STATIC
 EFI_STATUS
@@ -57,7 +57,7 @@ PrepareProcessors(
 		//
 		// Start in blocking mode. We will wait until each one of them finishes.
 		//
-		Status = MpServices->StartupThisAP(MpServices, NULL /* Function */, Index, NULL, 0, (VOID*)Processor, NULL);
+		Status = MpServices->StartupThisAP(MpServices, PrepareProcessor, Index, NULL, 0, (VOID*)Processor, NULL);
 		if (EFI_ERROR(Status)) {
 			DebugPrint(DEBUG_ERROR, "[CATALYST] Failed starting AP %d. Error: %r\n", Index, Status);
 			return Status;
@@ -68,11 +68,23 @@ PrepareProcessors(
 
 	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Preparing BSP...\n");
 
-	/* Call */
+	//
+	// They are all zero initialized. So Index for the first processor is zero.
+	//
+	PrepareProcessor(&VirtualProcessors[0]);
 
 	DebugPrint(DEBUG_VERBOSE, "[CATALYST] BSP initialized. We are ready.\n");
 
 	return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+FindFirmware(
+	IN EFI_HANDLE	ImageHandle
+) {
+
 }
 
 EFI_STATUS
@@ -88,25 +100,46 @@ UefiMain(
 	DebugPrint(DEBUG_INFO, "[CATALYST] Welcome to Catalyst - Inexorable Hypervisor\n");
 
 	//
+	// Find virtual machine firmware.
+	//
+	EFI_STATUS Status = FindFirmware(ImageHandle);
+	if (EFI_ERROR(Status)) {
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to prepare processors: %r\n", Status);
+		return Status;
+	}
+
+	//
 	// VMX support must be present.
 	//
 	ASSERT(IsVmxSupported());
 
 	//
 	// VMX must be enabled.
+	// If the VMX is enabled but BIOS didn't set the lock bit, then screw your BIOS (or OVMF for this context. No don't screw OVMF. It's cool).
 	//
 	ASSERT(IsVmxEnabled());
+
+	//
+	// By the golden rule of x86, all logical processors of the same socket must be same. If one logical processor supports VMX, so does the others.
+	// This "golden rule" that I just made up might not be reliable when there are more physical cpus that are different, and are in different sockets.
+	// But this code will work for our demonstration purposes.
+	// Neither way, I don't care. Neither do you.
+	//
 
 	DebugPrint(DEBUG_INFO, "[CATALYST] Initializing APs...\n");
 
 	//
 	// All processors must be woken up and ready.
 	//
-	EFI_STATUS Status = PrepareProcessors();
+	Status = PrepareProcessors();
 	if (EFI_ERROR(Status)) {
 		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to prepare processors: %r\n", Status);
 		return Status;
 	}
+
+	//
+	// Virtualize all processors.
+	//
 
 	return EFI_SUCCESS;
 }

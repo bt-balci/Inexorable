@@ -2,12 +2,352 @@
 #include <Uefi.h>
 #include "x86.h"
 
+///////////////////////////////////////////////
+////				Methods				   ////
+///////////////////////////////////////////////
+
+VOID
+EFIAPI
+PrepareProcessor(
+	IN OUT VOID*	Argument
+);
+
+///////////////////////////////////////////////
+////				Structs				   ////
+///////////////////////////////////////////////
+
 /*
 	Structure representing each virtual processor.
 */
 typedef struct {
-	INTEL_VMX_REGION VmxOn;
-	INTEL_VMX_REGION Vmcs;
+	struct {
+		INTEL_VMX_REGION VmxOn;
+		INTEL_VMX_REGION Vmcs;
+	} Vmx;
+	
 	X86_CONTEXT_AREA Context;
+
+	struct {
+		X86_IDT_ENTRY Idt[256];
+		X86_GDT_ENTRY Gdt[3];
+	} DescriptorTables;
+	
 	UINT32 Index;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_CPU;
+
+
+///////////////////////////////////////////////
+////				Enums				   ////
+///////////////////////////////////////////////
+
+typedef enum {
+	VmEntryLoadDebugControls = 1 << 2,
+	VmEntryIa32eModeGuest = 1 << 9,
+	VmEntryEntryToSmm = 1 << 10,
+	VmEntryDeactivateDualMonitor = 1 << 11,
+	VmEntryLoadIa32PerfGlobalCtrl = 1 << 13,
+	VmEntryLoadIa32Pat = 1 << 14,
+	VmEntryLoadIa32Efer = 1 << 15,
+	VmEntryLoadIa32Bndcfgs = 1 << 16,
+	VmEntryConcealVmxFromPt = 1 << 17,
+	VmEntryLoadIa32RtitCtl = 1 << 18,
+} VmxVmEntryControls;
+
+typedef enum {
+	VmExitSaveDebugControls = 1 << 2,
+	VmExitHostAddressSpaceSize = 1 << 9,
+	VmExitLoadIa32PerfGlobalCtrl = 1 << 12,
+	VmExitAckInterruptOnExit = 1 << 15,
+	VmExitSaveIa32Pat = 1 << 18,
+	VmExitLoadIa32Pat = 1 << 19,
+	VmExitSaveIa32Efer = 1 << 20,
+	VmExitLoadIa32Efer = 1 << 21,
+	VmExitSaveVmxPreemptionTimer = 1 << 22,
+	VmExitClearIa32Bndcfgs = 1 << 23,
+	VmExitConcealVmxFromPt = 1 << 24,
+	VmExitClearIa32RtitCtl = 1 << 25,
+} VmxVmExitControls;
+
+typedef enum {
+	ProcessorBased2VirtualizeApic = 1 << 0,
+	ProcessorBased2EnableEpt = 1 << 1,
+	ProcessorBased2DtableExiting = 1 << 2,
+	ProcessorBased2EnableRdtscp = 1 << 3,
+	ProcessorBased2VirtualizeX2apic = 1 << 4,
+	ProcessorBased2EnableVpid = 1 << 5,
+	ProcessorBased2WbinvdExiting = 1 << 6,
+	ProcessorBased2UnrestrictedGuest = 1 << 7,
+	ProcessorBased2VirtualizeApicRegister = 1 << 8,
+	ProcessorBased2VirtualInterruptDelivery = 1 << 9,
+	ProcessorBased2PauseLoopExiting = 1 << 10,
+	ProcessorBased2RdrandExiting = 1 << 11,
+	ProcessorBased2EnableInvpcid = 1 << 12,
+	ProcessorBased2EnableVmFunctions = 1 << 13,
+	ProcessorBased2VmcsShadowing = 1 << 14,
+	ProcessorBased2EnclsExiting = 1 << 15,
+	ProcessorBased2RdseedExiting = 1 << 16,
+	ProcessorBased2EnablePml = 1 << 17,
+	ProcessorBased2EptViolationVe = 1 << 18,
+	ProcessorBased2ConcealVmxFromPt = 1 << 19,
+	ProcessorBased2EnableXsavesXrstors = 1 << 20,
+	ProcessorBased2ModeBasedEpt = 1 << 22,
+	ProcessorBased2SubPageEpt = 1 << 23,
+	ProcessorBased2IntelPtGuestPhysical = 1 << 24,
+	ProcessorBased2UseTscScaling = 1 << 25,
+	ProcessorBased2EnableUserWaitPause = 1 << 26,
+	ProcessorBased2EnclvExiting = 1 << 28,
+} VmxProcessorBased2Controls;
+
+typedef enum {
+	ProcessorBasedInterruptWindowExiting = 1 << 2,
+	ProcessorBasedUseTscOffsetting = 1 << 3,
+	ProcessorBasedHltExiting = 1 << 7,
+	ProcessorBasedInvlpgExiting = 1 << 9,
+	ProcessorBasedMwaitExiting = 1 << 10,
+	ProcessorBasedRdpmcExiting = 1 << 11,
+	ProcessorBasedRdtscExiting = 1 << 12,
+	ProcessorBasedCr3LoadExiting = 1 << 15,
+	ProcessorBasedCr3StoreExiting = 1 << 16,
+	ProcessorBasedCr8LoadExiting = 1 << 19,
+	ProcessorBasedCr8StoreExiting = 1 << 20,
+	ProcessorBasedUseTprShadow = 1 << 21,
+	ProcessorBasedNmiWindowExiting = 1 << 22,
+	ProcessorBasedMovDrExiting = 1 << 23,
+	ProcessorBasedUncondIoExiting = 1 << 24,
+	ProcessorBasedUseIoBitmaps = 1 << 25,
+	ProcessorBasedMonitorTrapFlag = 1 << 27,
+	ProcessorBasedUseMsrBitmaps = 1 << 28,
+	ProcessorBasedMonitorExiting = 1 << 29,
+	ProcessorBasedPauseExiting = 1 << 30,
+	ProcessorBasedSecondaryControls = 1 << 31,
+} VmxProcessorBasedControls;
+
+typedef enum {
+	PinBasedExternalInterruptExiting = 1 << 0,
+	PinBasedNmiExiting = 1 << 3,
+	PinBasedVirtualNmis = 1 << 5,
+	PinBasedVmxPreemptionTimer = 1 << 6,
+	PinBasedPostedInterrupts = 1 << 7,
+} VmxPinBasedControls;
+
+///////////////////////////////////////////////
+////				VMCS				   ////
+///////////////////////////////////////////////
+
+
+#define VPID 0x0
+#define POSTED_INTERRUPT_NOTIFICATION_VECTOR 0x2
+#define EPTP_INDEX 0x4
+
+#define IO_BITMAP_A_ADDR_FULL 0x2000
+#define IO_BITMAP_A_ADDR_HIGH 0x2001
+#define IO_BITMAP_B_ADDR_FULL 0x2002
+#define IO_BITMAP_B_ADDR_HIGH 0x2003
+#define MSR_BITMAPS_ADDR_FULL 0x2004
+#define MSR_BITMAPS_ADDR_HIGH 0x2005
+#define VMEXIT_MSR_STORE_ADDR_FULL 0x2006
+#define VMEXIT_MSR_STORE_ADDR_HIGH 0x2007
+#define VMEXIT_MSR_LOAD_ADDR_FULL 0x2008
+#define VMEXIT_MSR_LOAD_ADDR_HIGH 0x2009
+#define VMENTRY_MSR_LOAD_ADDR_FULL 0x200A
+#define VMENTRY_MSR_LOAD_ADDR_HIGH 0x200B
+#define EXECUTIVE_VMCS_PTR_FULL 0x200C
+#define EXECUTIVE_VMCS_PTR_HIGH 0x200D
+#define PML_ADDR_FULL 0x200E
+#define PML_ADDR_HIGH 0x200F
+#define TSC_OFFSET_FULL 0x2010
+#define TSC_OFFSET_HIGH 0x2011
+#define VIRT_APIC_ADDR_FULL 0x2012
+#define VIRT_APIC_ADDR_HIGH 0x2013
+#define APIC_ACCESS_ADDR_FULL 0x2014
+#define APIC_ACCESS_ADDR_HIGH 0x2015
+#define POSTED_INTERRUPT_DESC_ADDR_FULL 0x2016
+#define POSTED_INTERRUPT_DESC_ADDR_HIGH 0x2017
+#define VM_FUNCTION_CONTROLS_FULL 0x2018
+#define VM_FUNCTION_CONTROLS_HIGH 0x2019
+#define EPTP_FULL 0x201A
+#define EPTP_HIGH 0x201B
+#define EOI_EXIT0_FULL 0x201C
+#define EOI_EXIT0_HIGH 0x201D
+#define EOI_EXIT1_FULL 0x201E
+#define EOI_EXIT1_HIGH 0x201F
+#define EOI_EXIT2_FULL 0x2020
+#define EOI_EXIT2_HIGH 0x2021
+#define EOI_EXIT3_FULL 0x2022
+#define EOI_EXIT3_HIGH 0x2023
+#define EPTP_LIST_ADDR_FULL 0x2024
+#define EPTP_LIST_ADDR_HIGH 0x2025
+#define VMREAD_BITMAP_ADDR_FULL 0x2026
+#define VMREAD_BITMAP_ADDR_HIGH 0x2027
+#define VMWRITE_BITMAP_ADDR_FULL 0x2028
+#define VMWRITE_BITMAP_ADDR_HIGH 0x2029
+#define VIRT_EXCEPTION_INFO_ADDR_FULL 0x202A
+#define VIRT_EXCEPTION_INFO_ADDR_HIGH 0x202B
+#define XSS_EXITING_BITMAP_FULL 0x202C
+#define XSS_EXITING_BITMAP_HIGH 0x202D
+#define ENCLS_EXITING_BITMAP_FULL 0x202E
+#define ENCLS_EXITING_BITMAP_HIGH 0x202F
+#define SUBPAGE_PERM_TABLE_PTR_FULL 0x2030
+#define SUBPAGE_PERM_TABLE_PTR_HIGH 0x2031
+#define TSC_MULTIPLIER_FULL 0x2032
+#define TSC_MULTIPLIER_HIGH 0x2033
+
+#define PINBASED_EXEC_CONTROLS 0x4000
+#define PRIMARY_PROCBASED_EXEC_CONTROLS 0x4002
+#define EXCEPTION_BITMAP 0x4004
+#define PAGE_FAULT_ERR_CODE_MASK 0x4006
+#define PAGE_FAULT_ERR_CODE_MATCH 0x4008
+#define CR3_TARGET_COUNT 0x400A
+#define VMEXIT_CONTROLS 0x400C
+#define VMEXIT_MSR_STORE_COUNT 0x400E
+#define VMEXIT_MSR_LOAD_COUNT 0x4010
+#define VMENTRY_CONTROLS 0x4012
+#define VMENTRY_MSR_LOAD_COUNT 0x4014
+#define VMENTRY_INTERRUPTION_INFO_FIELD 0x4016
+#define VMENTRY_EXCEPTION_ERR_CODE 0x4018
+#define VMENTRY_INSTRUCTION_LEN 0x401A
+#define TPR_THRESHOLD 0x401C
+#define SECONDARY_PROCBASED_EXEC_CONTROLS 0x401E
+#define PLE_GAP 0x4020
+#define PLE_WINDOW 0x4022
+
+#define CR0_GUEST_HOST_MASK 0x6000
+#define CR4_GUEST_HOST_MASK 0x6002
+#define CR0_READ_SHADOW 0x6004
+#define CR4_READ_SHADOW 0x6006
+#define CR3_TARGET_VALUE0 0x6008
+#define CR3_TARGET_VALUE1 0x600A
+#define CR3_TARGET_VALUE2 0x600C
+#define CR3_TARGET_VALUE3 0x600E
+
+
+
+
+#define HOST_ES_SELECTOR 0xC00
+#define HOST_CS_SELECTOR 0xC02
+#define HOST_SS_SELECTOR 0xC04
+#define HOST_DS_SELECTOR 0xC06
+#define HOST_FS_SELECTOR 0xC08
+#define HOST_GS_SELECTOR 0xC0A
+#define HOST_TR_SELECTOR 0xC0C
+
+#define HOST_IA32_PAT_FULL 0x2C00
+#define HOST_IA32_PAT_HIGH 0x2C01
+#define HOST_IA32_EFER_FULL 0x2C02
+#define HOST_IA32_EFER_HIGH 0x2C03
+#define HOST_IA32_PERF_GLOBAL_CTRL_FULL 0x2C04
+#define HOST_IA32_PERF_GLOBAL_CTRL_HIGH 0x2C05
+
+#define HOST_IA32_SYSENTER_CS 0x4C00
+
+#define HOST_CR0 0x6C00
+#define HOST_CR3 0x6C02
+#define HOST_CR4 0x6C04
+#define HOST_FS_BASE 0x6C06
+#define HOST_GS_BASE 0x6C08
+#define HOST_TR_BASE 0x6C0A
+#define HOST_GDTR_BASE 0x6C0C
+#define HOST_IDTR_BASE 0x6C0E
+#define HOST_IA32_SYSENTER_ESP 0x6C10
+#define HOST_IA32_SYSENTER_EIP 0x6C12
+#define HOST_RSP 0x6C14
+#define HOST_RIP 0x6C16
+
+
+#define READONLY_GUEST_PHYSICAL_ADDR_FULL 0x2400
+#define READONLY_GUEST_PHYSICAL_ADDR_HIGH 0x2401
+
+#define READONLY_VM_INSTRUCTION_ERROR 0x4400
+#define READONLY_EXIT_REASON 0x4402
+#define READONLY_VMEXIT_INTERRUPTION_INFO 0x4404
+#define READONLY_VMEXIT_INTERRUPTION_ERR_CODE 0x4406
+#define READONLY_IDT_VECTORING_INFO 0x4408
+#define READONLY_IDT_VECTORING_ERR_CODE 0x440A
+#define READONLY_VMEXIT_INSTRUCTION_LEN 0x440C
+#define READONLY_VMEXIT_INSTRUCTION_INFO 0x440E
+
+#define READONLY_EXIT_QUALIFICATION 0x6400
+#define READONLY_IO_RCX 0x6402
+#define READONLY_IO_RSI 0x6404
+#define READONLY_IO_RDI 0x6406
+#define READONLY_IO_RIP 0x6408
+#define READONLY_GUEST_LINEAR_ADDR 0x640A
+
+#define GUEST_ES_SELECTOR 0x800
+#define GUEST_CS_SELECTOR 0x802
+#define GUEST_SS_SELECTOR 0x804
+#define GUEST_DS_SELECTOR 0x806
+#define GUEST_FS_SELECTOR 0x808
+#define GUEST_GS_SELECTOR 0x80A
+#define GUEST_LDTR_SELECTOR 0x80C
+#define GUEST_TR_SELECTOR 0x80E
+#define GUEST_INTERRUPT_STATUS 0x810
+#define GUEST_PML_INDEX 0x812
+
+#define GUEST_LINK_PTR_FULL 0x2800
+#define GUEST_LINK_PTR_HIGH 0x2801
+#define GUEST_IA32_DEBUGCTL_FULL 0x2802
+#define GUEST_IA32_DEBUGCTL_HIGH 0x2803
+#define GUEST_IA32_PAT_FULL 0x2804
+#define GUEST_IA32_PAT_HIGH 0x2805
+#define GUEST_IA32_EFER_FULL 0x2806
+#define GUEST_IA32_EFER_HIGH 0x2807
+#define GUEST_IA32_PERF_GLOBAL_CTRL_FULL 0x2808
+#define GUEST_IA32_PERF_GLOBAL_CTRL_HIGH 0x2809
+#define GUEST_PDPTE0_FULL 0x280A
+#define GUEST_PDPTE0_HIGH 0x280B
+#define GUEST_PDPTE1_FULL 0x280C
+#define GUEST_PDPTE1_HIGH 0x280D
+#define GUEST_PDPTE2_FULL 0x280E
+#define GUEST_PDPTE2_HIGH 0x280F
+#define GUEST_PDPTE3_FULL 0x2810
+#define GUEST_PDPTE3_HIGH 0x2811
+#define GUEST_IA32_BNDCFGS_FULL 0x2812
+#define GUEST_IA32_BNDCFGS_HIGH 0x2813
+#define GUEST_IA32_RTIT_CTL_FULL 0x2814
+#define GUEST_IA32_RTIT_CTL_HIGH 0x2815
+
+#define GUEST_ES_LIMIT 0x4800
+#define GUEST_CS_LIMIT 0x4802
+#define GUEST_SS_LIMIT 0x4804
+#define GUEST_DS_LIMIT 0x4806
+#define GUEST_FS_LIMIT 0x4808
+#define GUEST_GS_LIMIT 0x480A
+#define GUEST_LDTR_LIMIT 0x480C
+#define GUEST_TR_LIMIT 0x480E
+#define GUEST_GDTR_LIMIT 0x4810
+#define GUEST_IDTR_LIMIT 0x4812
+#define GUEST_ES_ACCESS_RIGHTS 0x4814
+#define GUEST_CS_ACCESS_RIGHTS 0x4816
+#define GUEST_SS_ACCESS_RIGHTS 0x4818
+#define GUEST_DS_ACCESS_RIGHTS 0x481A
+#define GUEST_FS_ACCESS_RIGHTS 0x481C
+#define GUEST_GS_ACCESS_RIGHTS 0x481E
+#define GUEST_LDTR_ACCESS_RIGHTS 0x4820
+#define GUEST_TR_ACCESS_RIGHTS 0x4822
+#define GUEST_INTERRUPTIBILITY_STATE 0x4824
+#define GUEST_ACTIVITY_STATE 0x4826
+#define GUEST_SMBASE 0x4828
+#define GUEST_IA32_SYSENTER_CS 0x482A
+#define GUEST_VMX_PREEMPTION_TIMER_VALUE 0x482E
+
+#define GUEST_CR0 0x6800
+#define GUEST_CR3 0x6802
+#define GUEST_CR4 0x6804
+#define GUEST_ES_BASE 0x6806
+#define GUEST_CS_BASE 0x6808
+#define GUEST_SS_BASE 0x680A
+#define GUEST_DS_BASE 0x680C
+#define GUEST_FS_BASE 0x680E
+#define GUEST_GS_BASE 0x6810
+#define GUEST_LDTR_BASE 0x6812
+#define GUEST_TR_BASE 0x6814
+#define GUEST_GDTR_BASE 0x6816
+#define GUEST_IDTR_BASE 0x6818
+#define GUEST_DR7 0x681A
+#define GUEST_RSP 0x681C
+#define GUEST_RIP 0x681E
+#define GUEST_RFLAGS 0x6820
+#define GUEST_PENDING_DBG_EXCEPTIONS 0x6822
+#define GUEST_IA32_SYSENTER_ESP 0x6824
+#define GUEST_IA32_SYSENTER_EIP 0x6826

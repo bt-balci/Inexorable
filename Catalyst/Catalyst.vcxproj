@@ -54,6 +54,7 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
   </ImportGroup>
   <ImportGroup Label="Shared">
   </ImportGroup>
@@ -141,7 +142,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -mgeneral-regs-only %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
@@ -167,7 +168,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -mgeneral-regs-only %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
@@ -184,6 +185,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.c" />
+    <ClCompile Include="Vm.c" />
     <ClCompile Include="x86.c" />
   </ItemGroup>
   <ItemGroup>
@@ -193,5 +195,6 @@
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
   </ImportGroup>
 </Project>
