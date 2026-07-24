@@ -3,6 +3,8 @@
 #include <Library/DebugLib.h>
 #include <Library/BaseLib.h>
 #include <Protocol/MpService.h>
+#include <Protocol/LoadedImage.h>
+#include <Protocol/SimpleFileSystem.h>
 
 #include "Efi.h"
 #include "x86.h"
@@ -78,14 +80,51 @@ PrepareProcessors(
 	return EFI_SUCCESS;
 }
 
+#if 0
 STATIC
 EFI_STATUS
 EFIAPI
 FindFirmware(
 	IN EFI_HANDLE	ImageHandle
 ) {
+	EFI_LOADED_IMAGE_PROTOCOL*			LoadedImage = NULL;
+	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL*	FileSystem	= NULL;
+	EFI_FILE_PROTOCOL*					Root		= NULL;
 
+	EFI_STATUS Status = gBS->OpenProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage, ImageHandle, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
+	if (EFI_ERROR(Status)) {
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to open loaded image protocol: %r\n", Status);
+		return Status;
+	}
+
+	//
+	// Open Simple File System Protocol on the same device handle.
+	//
+	Status = gBS->OpenProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem, ImageHandle, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
+	if (EFI_ERROR(Status)) {
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to open simple file system protocol: %r\n", Status);
+		return Status;
+	}
+
+	//
+	// Open current volume root.
+	//
+	Status = FileSystem->OpenVolume(FileSystem, &Root);
+	if (EFI_ERROR(Status)) {
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to open simple file system protocol: %r\n", Status);
+		return Status;
+	}
+
+	//
+	// Open and read "firmware.efi" into memory.
+	// Remember that because we are chads, we do not use gBS->LoadImage and submit to its chosen memory type.
+	// We set the image's base address to 0x1000. And we map to there like real men.
+	// Before virgins ask, yes, we constructed and mapped 0x1000 to actually free memory via pagetables.
+	// Virgins can continue relocating their PE32+ files. We map it to where it wants to be.
+	//
+	//Status = Root->Read()
 }
+#endif
 
 EFI_STATUS
 EFIAPI
@@ -104,7 +143,7 @@ UefiMain(
 	//
 	EFI_STATUS Status = FindFirmware(ImageHandle);
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to prepare processors: %r\n", Status);
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to find virtual machine firmware (tip: it must be named as Firmware.efi in root of the same volume): %r\n", Status);
 		return Status;
 	}
 

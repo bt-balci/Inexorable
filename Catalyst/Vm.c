@@ -8,18 +8,6 @@
 #include "Vm.h"
 
 STATIC
-UINT32
-GetSegmentAccessRights(
-	UINT32 AccessRights
-) {
-	if (AccessRights == 0) {
-		return 1 << 16;
-	}
-
-	return (AccessRights >> 8) & 0xF0FF;
-}
-
-STATIC
 UINT64
 AdjustVmcsControl(
 	IN UINT64	Control,
@@ -172,6 +160,9 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_GDTR_BASE, Descriptor.Base);
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
 
+	//
+	// Intel's propaganda to force everyone to use sysenter again.
+	//
 	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS, __readmsr(IA32_SYSENTER_CS));
 	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP, __readmsr(IA32_SYSENTER_EIP));
 	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP, __readmsr(IA32_SYSENTER_ESP));
@@ -195,7 +186,7 @@ PrepareProcessor(
 	DebugPrint(DEBUG_INFO, "[CATALYST] Preparing processor %d...\n", Cpu->Index);
 
 	//
-	// Set the GS base address to current CPU's control pointer
+	// Set the GS base address to current CPU's control pointer.
 	//
 	_writegsbase_u64((unsigned long long)Cpu);
 
@@ -251,6 +242,7 @@ PrepareProcessor(
 	//
 	// Set the interrupt handler for sexy ACPI shenanigans.
 	// Or don't.
+	// Or do, I guess.
 	//
 	Cpu->DescriptorTables.Idt[209] = GenerateIdtEntry((UINT64)0, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
 

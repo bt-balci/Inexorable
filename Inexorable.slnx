@@ -4,4 +4,5 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="Catalyst/Catalyst.vcxproj" Id="988ffab3-0766-4c19-a6ec-f800f936559d" />
+  <Project Path="Inexorable/Inexorable.vcxproj" Id="3fc16e6e-0189-496f-84ff-f45322a39418" />
 </Solution>
