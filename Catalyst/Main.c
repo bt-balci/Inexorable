@@ -1,3 +1,6 @@
+#ifndef _MAIN_C_
+#define _MAIN_C_
+
 #include <Uefi.h>
 #include <Base.h>
 #include <Library/DebugLib.h>
@@ -9,6 +12,19 @@
 #include "Efi.h"
 #include "x86.h"
 #include "Vm.h"
+#include "Memory.h"
+
+//
+// Inclusion skill issue.
+//
+EFI_SYSTEM_TABLE* gST = NULL;
+EFI_BOOT_SERVICES* gBS = NULL;
+EFI_RUNTIME_SERVICES* gRT = NULL;
+CHAR8* gEfiCallerBaseName = "BT-BALCI";
+CONST UINT8 g_InexorableEfi[] = {
+ #embed "../x64/Debug/inexorable.efi"
+};
+CONST UINTN g_InexorableEfiSize = sizeof(g_InexorableEfi);
 
 CATALYST_VIRTUAL_CPU VirtualProcessors[CONFIG_CPU_COUNT] = {0};
 
@@ -48,31 +64,38 @@ PrepareProcessors(
 	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Total of %ull processors, %ull enabled\n", TotalProcessors, EnabledProcessors);
 
 	//
+	// Fill each processor.
+	//
+	for (UINT32 i = 0; i < CONFIG_CPU_COUNT; i++) {
+		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[i];
+
+		UINT64 Cr3Base = ((UINT64)g_Pml4Table) | CR3_PWT;
+		Processor->Memory.Cr3Base = Cr3Base;
+		Processor->Index = i;
+	}
+
+	//
 	// Index = 1 to skip the BSP (current processor).
 	//
-	for (UINT32 Index = 1; Index < CONFIG_CPU_COUNT; Index++) {
-		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[Index];
-		Processor->Index = Index;
+	for (UINT32 i = 1; i < CONFIG_CPU_COUNT; i++) {
+		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[i];
 
-		DebugPrint(DEBUG_VERBOSE, "[CATALYST] Starting AP %d...\n", Index);
+		DebugPrint(DEBUG_VERBOSE, "[CATALYST] Starting AP %d...\n", i);
 
 		//
 		// Start in blocking mode. We will wait until each one of them finishes.
 		//
-		Status = MpServices->StartupThisAP(MpServices, PrepareProcessor, Index, NULL, 0, (VOID*)Processor, NULL);
+		Status = MpServices->StartupThisAP(MpServices, PrepareProcessor, i, NULL, 0, (VOID*)Processor, NULL);
 		if (EFI_ERROR(Status)) {
-			DebugPrint(DEBUG_ERROR, "[CATALYST] Failed starting AP %d. Error: %r\n", Index, Status);
+			DebugPrint(DEBUG_ERROR, "[CATALYST] Failed starting AP %d. Error: %r\n", i, Status);
 			return Status;
 		}
 
-		DebugPrint(DEBUG_VERBOSE, "[CATALYST] AP %d started!\n", Index);
+		DebugPrint(DEBUG_VERBOSE, "[CATALYST] AP %d started!\n", i);
 	}
 
 	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Preparing BSP...\n");
 
-	//
-	// They are all zero initialized. So Index for the first processor is zero.
-	//
 	PrepareProcessor(&VirtualProcessors[0]);
 
 	DebugPrint(DEBUG_VERBOSE, "[CATALYST] BSP initialized. We are ready.\n");
@@ -80,51 +103,78 @@ PrepareProcessors(
 	return EFI_SUCCESS;
 }
 
-#if 0
 STATIC
 EFI_STATUS
 EFIAPI
-FindFirmware(
-	IN EFI_HANDLE	ImageHandle
+MapMemory(
+	VOID
 ) {
-	EFI_LOADED_IMAGE_PROTOCOL*			LoadedImage = NULL;
-	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL*	FileSystem	= NULL;
-	EFI_FILE_PROTOCOL*					Root		= NULL;
+	UINTN	MapSize				= 0;
+	UINTN	MapKey				= 0;
+	UINT32	DescriptorVersion	= 0;
+	UINTN	DescriptorSize		= 0;
 
-	EFI_STATUS Status = gBS->OpenProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage, ImageHandle, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
-	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to open loaded image protocol: %r\n", Status);
+	DebugPrint(DEBUG_INFO, "[CATALYST] Mapping out free memory...\n");
+
+	EFI_STATUS Status = gBS->GetMemoryMap(&MapSize, NULL, &MapKey, &DescriptorSize, &DescriptorVersion);
+	if (Status != EFI_BUFFER_TOO_SMALL) {
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to get memory map size: %r\n", Status);
 		return Status;
 	}
 
 	//
-	// Open Simple File System Protocol on the same device handle.
+	// +10 to make sure
 	//
-	Status = gBS->OpenProtocol(LoadedImage->DeviceHandle, &gEfiSimpleFileSystemProtocolGuid, (VOID**)&FileSystem, ImageHandle, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
+	MapSize += DescriptorSize * 10;
+	EFI_MEMORY_DESCRIPTOR* DescriptorArray = 0;
+
+	Status = gBS->AllocatePool(EfiBootServicesData, MapSize, (VOID**)&DescriptorArray);
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to open simple file system protocol: %r\n", Status);
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to allocate for memory map: %r\n", Status);
 		return Status;
 	}
 
-	//
-	// Open current volume root.
-	//
-	Status = FileSystem->OpenVolume(FileSystem, &Root);
+	Status = gBS->GetMemoryMap(&MapSize, DescriptorArray, &MapKey, &DescriptorSize, &DescriptorVersion);
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to open simple file system protocol: %r\n", Status);
-		return Status;
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to get memory map: %r\n", Status);
+		goto End;
 	}
 
+	UINTN NumEntries = MapSize / DescriptorSize;
+	EFI_MEMORY_DESCRIPTOR* Desc = DescriptorArray;
+
 	//
-	// Open and read "firmware.efi" into memory.
-	// Remember that because we are chads, we do not use gBS->LoadImage and submit to its chosen memory type.
-	// We set the image's base address to 0x1000. And we map to there like real men.
-	// Before virgins ask, yes, we constructed and mapped 0x1000 to actually free memory via pagetables.
-	// Virgins can continue relocating their PE32+ files. We map it to where it wants to be.
+	// We will map everything from 0. As if there is contiguous, linear memory for the guest.
 	//
-	//Status = Root->Read()
+	UINT64 CurrentVirtualAddress = 0;
+
+	for (UINTN i = 0; i < NumEntries; i++) {
+		//
+		// Exclude everything except EfiConventionalMemory. We don't want to bork ourselves.
+		//
+		if (Desc->Type == EfiConventionalMemory /*||
+			Desc->Type == EfiBootServicesCode ||
+			Desc->Type == EfiBootServicesData ||
+			Desc->Type == EfiLoaderCode ||
+			Desc->Type == EfiLoaderData*/)
+		{
+			UINT64 PhysicalStart	= Desc->PhysicalStart;
+			UINT64 NumberOfPages	= Desc->NumberOfPages;
+			
+			DebugPrint(DEBUG_VERBOSE, "[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, CurrentVirtualAddress);
+			
+			MapPagesLinear(PhysicalStart, NumberOfPages, &CurrentVirtualAddress);
+
+			DebugPrint(DEBUG_VERBOSE, "[CATALYST] Mapped %d pages, new cursor: %p\n", PhysicalStart, NumberOfPages, CurrentVirtualAddress);
+		}
+
+		Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Desc + DescriptorSize);
+	}
+
+End:
+	gBS->FreePool(DescriptorArray);
+	return Status;
 }
-#endif
 
 EFI_STATUS
 EFIAPI
@@ -139,11 +189,11 @@ UefiMain(
 	DebugPrint(DEBUG_INFO, "[CATALYST] Welcome to Catalyst - Inexorable Hypervisor\n");
 
 	//
-	// Find virtual machine firmware.
+	// Construct page tables for guest.
 	//
-	EFI_STATUS Status = FindFirmware(ImageHandle);
+	EFI_STATUS Status = MapMemory();
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to find virtual machine firmware (tip: it must be named as Firmware.efi in root of the same volume): %r\n", Status);
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to map memory: %r\n", Status);
 		return Status;
 	}
 
@@ -182,3 +232,5 @@ UefiMain(
 
 	return EFI_SUCCESS;
 }
+
+#endif

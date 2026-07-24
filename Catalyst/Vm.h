@@ -1,4 +1,6 @@
-#pragma once
+#ifndef _VM_H_
+#define _VM_H_
+
 #include <Uefi.h>
 #include "x86.h"
 
@@ -32,6 +34,10 @@ typedef struct {
 		X86_GDT_ENTRY Gdt[3];
 	} DescriptorTables;
 	
+	struct {
+		UINT64 Cr3Base;
+	} Memory;
+
 	UINT32 Index;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_CPU;
 
@@ -351,3 +357,6 @@ typedef enum {
 #define GUEST_PENDING_DBG_EXCEPTIONS 0x6822
 #define GUEST_IA32_SYSENTER_ESP 0x6824
 #define GUEST_IA32_SYSENTER_EIP 0x6826
+
+
+#endif

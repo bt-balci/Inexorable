@@ -142,7 +142,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf -mgeneral-regs-only %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -H %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
@@ -152,6 +152,8 @@
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <BaseAddress>0x2000</BaseAddress>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -168,7 +170,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf -mgeneral-regs-only %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -H %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
@@ -178,6 +180,8 @@
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <BaseAddress>0x2000</BaseAddress>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -185,11 +189,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.c" />
+    <ClCompile Include="Memory.c" />
     <ClCompile Include="Vm.c" />
     <ClCompile Include="x86.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h" />
+    <ClInclude Include="Memory.h" />
     <ClInclude Include="Vm.h" />
     <ClInclude Include="x86.h" />
   </ItemGroup>

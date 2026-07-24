@@ -1,3 +1,6 @@
+#ifndef _X86_C_
+#define _X86_C_
+
 #include <Uefi.h>
 #include <Base.h>
 #include <Library/DebugLib.h>
@@ -160,3 +163,5 @@ IsVmxEnabled(
 
 	return TRUE;
 }
+
+#endif

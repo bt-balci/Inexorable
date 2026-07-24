@@ -1,4 +1,6 @@
-#pragma once
+#ifndef _X86_H_
+#define _X86_H_
+
 #include <Uefi.h>
 
 ///////////////////////////////////////////////
@@ -437,3 +439,5 @@ inline UINT64 AsmLoadSegmentAccessRights(UINT64 Selector) {
 	);
 	return Result;
 }
+
+#endif

@@ -1,16 +1,18 @@
-#pragma once
+#ifndef _EFI_H_
+#define _EFI_H_
+
 #include <Uefi.h>
 
 #define CONFIG_CPU_COUNT	4
 
-EFI_SYSTEM_TABLE*		gST = NULL;
-EFI_BOOT_SERVICES*		gBS = NULL;
-EFI_RUNTIME_SERVICES*	gRT = NULL;
+extern EFI_SYSTEM_TABLE*		gST;
+extern EFI_BOOT_SERVICES*		gBS;
+extern EFI_RUNTIME_SERVICES*	gRT;
 
-CHAR8* gEfiCallerBaseName = "BT-BALCI";
+extern CHAR8* gEfiCallerBaseName;
 
-CONST UINT8 g_InexorableEfi[] = {
- #embed "../x64/Debug/inexorable.efi"
-};
+extern CONST UINT8 g_InexorableEfi[];
 
-CONST UINTN g_InexorableEfiSize = sizeof(g_InexorableEfi);
+extern CONST UINTN g_InexorableEfiSize;
+
+#endif

@@ -1,12 +1,8 @@
 #include <Uefi.h>
 #include <Base.h>
 
-EFI_STATUS
+VOID
 EFIAPI
 UefiMain(
-	IN EFI_HANDLE			ImageHandle,
-	IN EFI_SYSTEM_TABLE*	SystemTable
 ) {
-
-	return EFI_SUCCESS;
 }

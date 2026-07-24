@@ -1,3 +1,6 @@
+#ifndef _VM_C_
+#define _VM_C_
+
 #include <Uefi.h>
 #include <Base.h>
 #include <Library/BaseLib.h>
@@ -170,7 +173,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, ~0ULL);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
-	__vmx_vmwrite(GUEST_CR3, __readcr3());
+	__vmx_vmwrite(GUEST_CR3, Cpu->Memory.Cr3Base);
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());
@@ -321,3 +324,5 @@ PrepareProcessor(
 	//
 	SetupVmcs();
 }
+
+#endif
