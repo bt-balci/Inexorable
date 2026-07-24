@@ -142,6 +142,7 @@
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
@@ -167,6 +168,7 @@
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>

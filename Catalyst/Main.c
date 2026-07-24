@@ -43,7 +43,36 @@ PrepareProcessors(
 	//
 	ASSERT(EnabledProcessors == CONFIG_CPU_COUNT);
 
-	DebugPrint(DEBUG_INFO, "[CATALYST] Total of %ull processors, %ull enabled\n", TotalProcessors, EnabledProcessors);
+	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Total of %ull processors, %ull enabled\n", TotalProcessors, EnabledProcessors);
+
+	//
+	// Index = 1 to skip the BSP (current processor).
+	//
+	for (UINT32 Index = 1; Index < CONFIG_CPU_COUNT; Index++) {
+		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[Index];
+		Processor->Index = Index;
+
+		DebugPrint(DEBUG_VERBOSE, "[CATALYST] Starting AP %d...\n", Index);
+
+		//
+		// Start in blocking mode. We will wait until each one of them finishes.
+		//
+		Status = MpServices->StartupThisAP(MpServices, NULL /* Function */, Index, NULL, 0, (VOID*)Processor, NULL);
+		if (EFI_ERROR(Status)) {
+			DebugPrint(DEBUG_ERROR, "[CATALYST] Failed starting AP %d. Error: %r\n", Index, Status);
+			return Status;
+		}
+
+		DebugPrint(DEBUG_VERBOSE, "[CATALYST] AP %d started!\n", Index);
+	}
+
+	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Preparing BSP...\n");
+
+	/* Call */
+
+	DebugPrint(DEBUG_VERBOSE, "[CATALYST] BSP initialized. We are ready.\n");
+
+	return EFI_SUCCESS;
 }
 
 EFI_STATUS
@@ -56,7 +85,7 @@ UefiMain(
 	gBS = SystemTable->BootServices;
 	gRT = SystemTable->RuntimeServices;
 
-	DebugPrint(DEBUG_INFO, "Welcome to Catalyst - Inexorable Hypervisor\n");
+	DebugPrint(DEBUG_INFO, "[CATALYST] Welcome to Catalyst - Inexorable Hypervisor\n");
 
 	//
 	// VMX support must be present.
@@ -68,10 +97,16 @@ UefiMain(
 	//
 	ASSERT(IsVmxEnabled());
 
+	DebugPrint(DEBUG_INFO, "[CATALYST] Initializing APs...\n");
+
 	//
 	// All processors must be woken up and ready.
 	//
-	ASSERT(PrepareProcessors() == EFI_SUCCESS);
+	EFI_STATUS Status = PrepareProcessors();
+	if (EFI_ERROR(Status)) {
+		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to prepare processors: %r\n", Status);
+		return Status;
+	}
 
 	return EFI_SUCCESS;
 }
