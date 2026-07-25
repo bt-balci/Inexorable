@@ -16,7 +16,7 @@ DebugPrint0402(
     UINTN   CharCount;
     UINTN   Index;
 
-    if (Format == NULL) {
+    if (!Format) {
         return 0;
     }
 
