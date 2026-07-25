@@ -543,6 +543,7 @@ inline UINT8 __vmx_vmresume(VOID) {
 }
 
 inline UINT64 AsmLoadSegmentDescriptor(UINT64 GdtBase, UINT32 Selector) {
+	return GdtBase + (Selector & ~7ULL);
 	UINT64 Result;
 	__asm__ __volatile__(
 		"shrl $3, %k2\n\t"

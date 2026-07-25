@@ -166,6 +166,10 @@ VmExitHandler(
 		DebugPrint0402("[CATALYST] VMCS is borked\n");
 		DumpVmcs();
 	}
+	else if (ExitReason == VMEXIT_REASON_TRIPLE_FAULT) {
+		DebugPrint0402("[CATALYST] Guest triple-faulted\n");
+		DumpVmcs();
+	}
 
 	__asm__ __volatile__("hlt");
 }
@@ -277,12 +281,6 @@ SetupVmcs(
 
 	__vmx_vmwrite(HOST_IDTR_BASE, Descriptor.Base);
 
-	__vmx_vmwrite(HOST_IA32_EFER_FULL,		__readmsr(IA32_EFER));
-
-	__vmx_vmwrite(HOST_IA32_SYSENTER_CS,	__readmsr(IA32_SYSENTER_CS));
-	__vmx_vmwrite(HOST_IA32_SYSENTER_EIP,	__readmsr(IA32_SYSENTER_EIP));
-	__vmx_vmwrite(HOST_IA32_SYSENTER_ESP,	__readmsr(IA32_SYSENTER_ESP));
-
 	__vmx_vmwrite(HOST_RIP, (UINT64)AsmVmExit);
 	__vmx_vmwrite(HOST_RSP, (UINT64)&Cpu->Data.HostStack);
 
@@ -308,7 +306,6 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_GS_LIMIT, AsmLoadSegmentLimit(AsmReadGs()));
 	__vmx_vmwrite(GUEST_TR_LIMIT, AsmLoadSegmentLimit(AsmReadTr()));
 
-	
 	__vmx_vmwrite(GUEST_ES_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadEs()));
 	__vmx_vmwrite(GUEST_CS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadCs()));
 	__vmx_vmwrite(GUEST_SS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadSs()));
@@ -316,8 +313,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_FS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadGs()));
 	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadTr()));
-	
-	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, (1 << 16)); // Invalid bit set
+	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(0));
 
 	__vmx_vmwrite(GUEST_FS_BASE, (UINT64)Cpu);
 	__vmx_vmwrite(GUEST_GS_BASE, 0);
@@ -348,8 +344,6 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());
-
-	__vmx_vmwrite(GUEST_IA32_EFER_FULL, __readmsr(IA32_EFER));
 
 	//
 	// Test
