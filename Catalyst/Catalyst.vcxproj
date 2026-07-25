@@ -142,8 +142,9 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf -H %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -fno-asynchronous-unwind-tables -fno-unwind-tables %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
@@ -152,8 +153,10 @@
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <BaseAddress>0x2000</BaseAddress>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <BaseAddress>
+      </BaseAddress>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>false</DataExecutionPrevention>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -170,18 +173,44 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf -H %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -fno-asynchronous-unwind-tables -fno-unwind-tables %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>BaseCacheMaintenanceLib.lib;BaseCpuLib.lib;BaseDebugPrintErrorLevelLib.lib;BaseLib.lib;BaseMemoryLib.lib;BasePrintLib.lib;BaseSynchronizationLib.lib;GlueLib.lib;UefiFileHandleLib.lib;IntrinsicLib.lib;UefiApplicationEntryPoint.lib;UefiBootServicesTableLib.lib;UefiDebugLibConOut.lib;UefiDevicePathLibDevicePathProtocol.lib;UefiDriverEntryPoint.lib;UefiHiiServicesLib.lib;UefiHiiLib.lib;UefiLib.lib;UefiMemoryAllocationLib.lib;UefiMemoryLib.lib;UefiRuntimeServicesTableLib.lib;UefiRuntimeLib.lib;UefiShellLib.lib;UefiSortLib.lib;BaseIoLib.lib;SerialPortLib.lib;TdxLib.lib;RegisterFilterLib.lib;CcProbeLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>UefiApplicationEntryPoint.lib;
+  BaseLib.lib;
+  BaseMemoryLib.lib;
+  UefiBootServicesTableLib.lib;
+  UefiRuntimeServicesTableLib.lib;
+  UefiLib.lib;
+  UefiMemoryAllocationLib.lib;
+  UefiMemoryLib.lib;
+  BasePrintLib.lib;
+  BaseDebugPrintErrorLevelLib.lib;
+  GlueLib.lib;
+  IntrinsicLib.lib;
+  BaseCacheMaintenanceLib.lib;
+  BaseCpuLib.lib;
+  BaseSynchronizationLib.lib;
+  UefiFileHandleLib.lib;
+  UefiDevicePathLibDevicePathProtocol.lib;
+  UefiDriverEntryPoint.lib;
+  UefiRuntimeLib.lib;
+  BaseIoLib.lib;
+  RegisterFilterLib.lib;
+  CcProbeLib.lib;
+  TdxLib.lib;
+  %(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <BaseAddress>0x2000</BaseAddress>
-      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <BaseAddress>
+      </BaseAddress>
+      <RandomizedBaseAddress>true</RandomizedBaseAddress>
+      <DataExecutionPrevention>false</DataExecutionPrevention>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -190,6 +219,7 @@
   <ItemGroup>
     <ClCompile Include="Main.c" />
     <ClCompile Include="Memory.c" />
+    <ClCompile Include="Util.c" />
     <ClCompile Include="Vm.c" />
     <ClCompile Include="x86.c" />
   </ItemGroup>

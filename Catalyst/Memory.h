@@ -3,31 +3,22 @@
 
 #include <Uefi.h>
 
+
+#include "Vm.h"
+
 //
 // Maybe move to x86.h?
 //
 
 ///////////////////////////////////////////////
-////			   Definitions			   ////
-///////////////////////////////////////////////
-
-#define PAGE_PRESENT       (1ULL << 0)
-#define PAGE_RW            (1ULL << 1)
-#define PAGE_HUGE          (1ULL << 7)
-#define PAGE_ADDRESS_MASK  (0x000FFFFFFFFFF000ULL)
-
-#define PAGE_SIZE_4KB           0x1000ULL
-#define PAGE_SIZE_2MB           0x200000ULL
-
-#define CR3_ADDRESS_MASK    0x000FFFFFFFFFF000ULL
-#define CR3_PWT             (1ULL << 3ULL)
-#define CR3_PCD             (1ULL << 5ULL)
-
-///////////////////////////////////////////////
 ////				Globals				   ////
 ///////////////////////////////////////////////
 
-extern UINT64* g_Pml4Table;
+__attribute__((aligned(4096))) extern EPTP				g_Eptp;
+__attribute__((aligned(4096))) extern EPT_PML4			g_Epml4[512];
+__attribute__((aligned(4096))) extern EPT_PDPTE         g_Epdpt[64][512];
+__attribute__((aligned(4096))) extern EPT_LARGE_PDE     g_Epde[512][512];
+__attribute__((aligned(4096))) extern EPT_PTE		    g_Epte[16384][512];
 
 ///////////////////////////////////////////////
 ////				Methods				   ////
@@ -36,9 +27,9 @@ extern UINT64* g_Pml4Table;
 VOID
 EFIAPI
 MapPagesLinear(
-    IN UINT64       PhysicalStart,
-    IN UINT64       NumberOfPages,
-    IN OUT UINT64*  CurrentVirtualAddr
+    IN UINT64                       PhysicalStart,
+    IN UINT64                       NumberOfPages,
+    IN OUT UINT64*                  CurrentGuestPhysical
 );
 
 #endif

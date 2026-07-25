@@ -9,6 +9,8 @@
 
 #include "x86.h"
 #include "Vm.h"
+#include "Efi.h"
+#include "Memory.h"
 
 STATIC
 UINT64
@@ -72,7 +74,7 @@ SetupVmcs(
 ) {
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)_readgsbase_u64();
 
-	DebugPrint(DEBUG_INFO, "[CATALYST] Virtualizing processor %d...\n", Cpu->Index);
+	DebugPrint0402("[CATALYST] Virtualizing processor %d...\n", Cpu->Index);
 
 	//
 	// Initialize controls.
@@ -83,9 +85,9 @@ SetupVmcs(
 	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, 0));
 
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBasedSecondaryControls)));
+		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid)));
+		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
 
 	//
 	// Initialize host.
@@ -163,6 +165,9 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_GDTR_BASE, Descriptor.Base);
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
 
+	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
+	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
+
 	//
 	// Intel's propaganda to force everyone to use sysenter again.
 	//
@@ -173,11 +178,11 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, ~0ULL);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
-	__vmx_vmwrite(GUEST_CR3, Cpu->Memory.Cr3Base);
+	__vmx_vmwrite(GUEST_CR3, __readcr3());
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());
-}
+}	
 
 VOID
 EFIAPI
@@ -186,21 +191,24 @@ PrepareProcessor(
 ) {
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)Argument;
 
-	DebugPrint(DEBUG_INFO, "[CATALYST] Preparing processor %d...\n", Cpu->Index);
+	DebugPrint0402("[CATALYST] Preparing processor %d...\n", Cpu->Index);
 
-	//
-	// Set the GS base address to current CPU's control pointer.
-	//
-	_writegsbase_u64((unsigned long long)Cpu);
+	DebugPrint0402("[CATALYST] Preparing CR registers...\n");
 
 	//
 	// Read CR0 and CR4.
 	//
 	UINT64 Cr0 = __readcr0();
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR0 = %p\n", Cr0);
+	DebugPrint0402("[CATALYST] CR0 = %p\n", Cr0);
 
 	UINT64 Cr4 = __readcr4();
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR0 = %p\n", Cr4);
+
+	//
+	// Appearently CR4.FSGSBASE is not enabled. Let's fix that.
+	//
+	Cr4 |= (1 << 16);
+
+	DebugPrint0402("[CATALYST] CR4 = %p\n", Cr4);
 
 	//
 	// Read required bitmask values for Cr0 and Cr4.
@@ -208,20 +216,20 @@ PrepareProcessor(
 	UINT64 Cr0OrMask	= __readmsr(IA32_VMX_CR0_FIXED0);
 	UINT64 Cr0AndMask	= __readmsr(IA32_VMX_CR0_FIXED1);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR0_FIXED0 = %p\n", Cr0OrMask);
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR0_FIXED1 = %p\n", Cr0AndMask);
+	DebugPrint0402("[CATALYST] CR0_FIXED0 = %p\n", Cr0OrMask);
+	DebugPrint0402("[CATALYST] CR0_FIXED1 = %p\n", Cr0AndMask);
 
 	UINT64 Cr4OrMask	= __readmsr(IA32_VMX_CR4_FIXED0);
 	UINT64 Cr4AndMask	= __readmsr(IA32_VMX_CR4_FIXED1);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR4_FIXED0 = %p\n", Cr4OrMask);
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR4_FIXED1 = %p\n", Cr4AndMask);
+	DebugPrint0402("[CATALYST] CR4_FIXED0 = %p\n", Cr4OrMask);
+	DebugPrint0402("[CATALYST] CR4_FIXED1 = %p\n", Cr4AndMask);
 
 	Cr0 = (Cr0 & Cr0AndMask) | Cr0OrMask;
 	Cr4 = (Cr4 & Cr4AndMask) | Cr4OrMask;
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR0_FINAL = %p\n", Cr0);
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] CR4_FINAL = %p\n", Cr4);
+	DebugPrint0402("[CATALYST] CR0_FINAL = %p\n", Cr0);
+	DebugPrint0402("[CATALYST] CR4_FINAL = %p\n", Cr4);
 
 	//
 	// Write values back.
@@ -230,12 +238,26 @@ PrepareProcessor(
 	__writecr4(Cr4);
 
 	//
+	// Enable x2APIC. (Death to APIC and xAPIC)
+	//
+	UINT64 ApicBase = __readmsr(IA32_APIC_BASE);
+	ApicBase |= APIC_BASE_ENABLE_X2APIC;
+	ApicBase |= APIC_BASE_APIC_GLOBAL_EN;
+
+	__writemsr(IA32_APIC_BASE, ApicBase);
+
+	//
+	// Set the GS base address to current CPU's control pointer.
+	//
+	_writegsbase_u64((unsigned long long)Cpu);
+
+	//
 	// Setup IDT.
 	//
 	IA32_DESCRIPTOR Temp = { 0 };
 	AsmReadIdtr(&Temp);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] IDT.Base = %p, IDT.Limit = %d\n", Temp.Base, Temp.Limit);
+	DebugPrint0402("[CATALYST] IDT.Base = %p, IDT.Limit = %d\n", Temp.Base, Temp.Limit);
 
 	//
 	// Copy the default IDT.
@@ -255,7 +277,7 @@ PrepareProcessor(
 	Temp.Base = (UINTN)&Cpu->DescriptorTables.Idt;
 	Temp.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Idt) - 1);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] New IDT.Base = %p, New IDT.Limit = %d\n", Temp.Base, Temp.Limit);
+	DebugPrint0402("[CATALYST] New IDT.Base = %p, New IDT.Limit = %d\n", Temp.Base, Temp.Limit);
 
 	AsmWriteIdtr(&Temp);
 
@@ -275,20 +297,19 @@ PrepareProcessor(
 	Temp.Base = (UINTN)&Cpu->DescriptorTables.Gdt;
 	Temp.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Gdt) - 1);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] New GDT.Base = %p, New GDT.Limit = %d\n", Temp.Base, Temp.Limit);
+	DebugPrint0402("[CATALYST] New GDT.Base = %p, New GDT.Limit = %d\n", Temp.Base, Temp.Limit);
 
 	AsmWriteGdtr(&Temp);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Ds = %d, Ss = %d, Cs = %d\n", KERNEL_DS_SELECTOR, KERNEL_DS_SELECTOR, KERNEL_CS_SELECTOR);
+	DebugPrint0402("[CATALYST] Ds = %d, Ss = %d, Cs = %d\n", KERNEL_DS_SELECTOR, KERNEL_DS_SELECTOR, KERNEL_CS_SELECTOR);
 	*/
 
 	//
 	// Read VMX revision ID.
-	// The mask isn't necessary, but it makes me feel important and a skilled firmware developer.
 	//
-	UINT32 Revision = __readmsr(IA32_VMX_BASIC) & VMX_BASIC_REVISION_MASK;
+	UINT32 Revision = __readmsr(IA32_VMX_BASIC);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] VMX Revision = %d\n", Revision);
+	DebugPrint0402("[CATALYST] VMX Revision (IA32_VMX_BASIC) = %d\n", Revision);
 
 	//
 	// Set revision field of each VMX structure.
@@ -296,28 +317,32 @@ PrepareProcessor(
 	Cpu->Vmx.Vmcs.RevisionIdentifier	= Revision;
 	Cpu->Vmx.VmxOn.RevisionIdentifier	= Revision;
 
+	DebugPrint0402("[CATALYST] VMXON = %p\n", &Cpu->Vmx.VmxOn);
+	DebugPrint0402("[CATALYST] VMCS = %p\n", &Cpu->Vmx.Vmcs);
+
 	//
 	// Set VMXON region.
+	// We also need better error handling. The caller has no idea we fucked up.
 	//
-	UINT8 Error = __vmx_on((UINT64*)&Cpu->Vmx.VmxOn);
+	UINT8 Error = __vmx_on((UINT64)&Cpu->Vmx.VmxOn);
 	if (Error != 0) {
-		DebugPrint(DEBUG_VERBOSE, "[CATALYST] Failed to vmxon: %d\n", Error);
+		DebugPrint0402("[CATALYST] Failed to vmxon: %d\n", Error);
 		return;
 	}
 
-	Error = __vmx_vmclear((UINT64*)&Cpu->Vmx.Vmcs);
+	Error = __vmx_vmclear((UINT64)&Cpu->Vmx.Vmcs);
 	if (Error != 0) {
-		DebugPrint(DEBUG_VERBOSE, "[CATALYST] Failed to vmclear: %d\n", Error);
+		DebugPrint0402("[CATALYST] Failed to vmclear: %d\n", Error);
 		return;
 	}
 
-	Error = __vmx_vmptrld((UINT64*)&Cpu->Vmx.Vmcs);
+	Error = __vmx_vmptrld((UINT64)&Cpu->Vmx.Vmcs);
 	if (Error != 0) {
-		DebugPrint(DEBUG_VERBOSE, "[CATALYST] Failed to vmptrld: %d\n", Error);
+		DebugPrint0402("[CATALYST] Failed to vmptrld: %d\n", Error);
 		return;
 	}
 
-	DebugPrint(DEBUG_INFO, "[CATALYST] Processor %d prepared\n", Cpu->Index);
+	DebugPrint0402("[CATALYST] Processor %d prepared\n", Cpu->Index);
 
 	//
 	// Fill VMCS and virtualize processor.

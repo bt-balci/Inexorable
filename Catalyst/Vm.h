@@ -26,21 +26,21 @@ typedef struct {
 		INTEL_VMX_REGION VmxOn;
 		INTEL_VMX_REGION Vmcs;
 	} Vmx;
-	
+
 	X86_CONTEXT_AREA Context;
 
 	struct {
 		X86_IDT_ENTRY Idt[256];
 		X86_GDT_ENTRY Gdt[3];
 	} DescriptorTables;
-	
+
+
 	struct {
-		UINT64 Cr3Base;
-	} Memory;
+		UINT8 MsrBitmap[4096];
+	} Data;
 
 	UINT32 Index;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_CPU;
-
 
 ///////////////////////////////////////////////
 ////				Enums				   ////

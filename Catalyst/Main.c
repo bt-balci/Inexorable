@@ -61,16 +61,13 @@ PrepareProcessors(
 	//
 	ASSERT(EnabledProcessors == CONFIG_CPU_COUNT);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Total of %ull processors, %ull enabled\n", TotalProcessors, EnabledProcessors);
+	DebugPrint0402("[CATALYST] Total of %d processors, %d enabled\n", TotalProcessors, EnabledProcessors);
 
 	//
 	// Fill each processor.
 	//
 	for (UINT32 i = 0; i < CONFIG_CPU_COUNT; i++) {
 		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[i];
-
-		UINT64 Cr3Base = ((UINT64)g_Pml4Table) | CR3_PWT;
-		Processor->Memory.Cr3Base = Cr3Base;
 		Processor->Index = i;
 	}
 
@@ -80,25 +77,25 @@ PrepareProcessors(
 	for (UINT32 i = 1; i < CONFIG_CPU_COUNT; i++) {
 		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[i];
 
-		DebugPrint(DEBUG_VERBOSE, "[CATALYST] Starting AP %d...\n", i);
+		DebugPrint0402("[CATALYST] Starting AP %d...\n", i);
 
 		//
 		// Start in blocking mode. We will wait until each one of them finishes.
 		//
 		Status = MpServices->StartupThisAP(MpServices, PrepareProcessor, i, NULL, 0, (VOID*)Processor, NULL);
 		if (EFI_ERROR(Status)) {
-			DebugPrint(DEBUG_ERROR, "[CATALYST] Failed starting AP %d. Error: %r\n", i, Status);
+			DebugPrint0402("[CATALYST] Failed starting AP %d. Error: %r\n", i, Status);
 			return Status;
 		}
 
-		DebugPrint(DEBUG_VERBOSE, "[CATALYST] AP %d started!\n", i);
+		DebugPrint0402("[CATALYST] AP %d started!\n", i);
 	}
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] Preparing BSP...\n");
+	DebugPrint0402("[CATALYST] Preparing BSP...\n");
 
 	PrepareProcessor(&VirtualProcessors[0]);
 
-	DebugPrint(DEBUG_VERBOSE, "[CATALYST] BSP initialized. We are ready.\n");
+	DebugPrint0402("[CATALYST] BSP initialized. We are ready.\n");
 
 	return EFI_SUCCESS;
 }
@@ -114,11 +111,11 @@ MapMemory(
 	UINT32	DescriptorVersion	= 0;
 	UINTN	DescriptorSize		= 0;
 
-	DebugPrint(DEBUG_INFO, "[CATALYST] Mapping out free memory...\n");
+	DebugPrint0402("[CATALYST] Mapping out free memory...\n");
 
 	EFI_STATUS Status = gBS->GetMemoryMap(&MapSize, NULL, &MapKey, &DescriptorSize, &DescriptorVersion);
 	if (Status != EFI_BUFFER_TOO_SMALL) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to get memory map size: %r\n", Status);
+		DebugPrint0402("[CATALYST] Failed to get memory map size: %r\n", Status);
 		return Status;
 	}
 
@@ -130,18 +127,27 @@ MapMemory(
 
 	Status = gBS->AllocatePool(EfiBootServicesData, MapSize, (VOID**)&DescriptorArray);
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to allocate for memory map: %r\n", Status);
+		DebugPrint0402("[CATALYST] Failed to allocate for memory map: %r\n", Status);
 		return Status;
 	}
 
 	Status = gBS->GetMemoryMap(&MapSize, DescriptorArray, &MapKey, &DescriptorSize, &DescriptorVersion);
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to get memory map: %r\n", Status);
+		DebugPrint0402("[CATALYST] Failed to get memory map: %r\n", Status);
 		goto End;
 	}
 
 	UINTN NumEntries = MapSize / DescriptorSize;
 	EFI_MEMORY_DESCRIPTOR* Desc = DescriptorArray;
+
+	//
+	// Initialize globals.
+	//
+	g_Eptp.DirtyAndAccessEnabled = FALSE;
+	g_Eptp.PageWalkLength = 3;
+	g_Eptp.MemoryType = 6;
+
+	g_Eptp.Pml4Address = ((UINT64)&g_Epml4) >> 12;
 
 	//
 	// We will map everything from 0. As if there is contiguous, linear memory for the guest.
@@ -161,11 +167,11 @@ MapMemory(
 			UINT64 PhysicalStart	= Desc->PhysicalStart;
 			UINT64 NumberOfPages	= Desc->NumberOfPages;
 			
-			DebugPrint(DEBUG_VERBOSE, "[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, CurrentVirtualAddress);
+			DebugPrint0402("[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, CurrentVirtualAddress);
 			
 			MapPagesLinear(PhysicalStart, NumberOfPages, &CurrentVirtualAddress);
 
-			DebugPrint(DEBUG_VERBOSE, "[CATALYST] Mapped %d pages, new cursor: %p\n", PhysicalStart, NumberOfPages, CurrentVirtualAddress);
+			DebugPrint0402("[CATALYST] Mapped %d pages, new cursor: %p\n", NumberOfPages, CurrentVirtualAddress);
 		}
 
 		Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Desc + DescriptorSize);
@@ -180,20 +186,20 @@ EFI_STATUS
 EFIAPI
 UefiMain(
 	IN EFI_HANDLE			ImageHandle,
-	IN EFI_SYSTEM_TABLE*	SystemTable
+	IN EFI_SYSTEM_TABLE* SystemTable
 ) {
 	gST = SystemTable;
 	gBS = SystemTable->BootServices;
 	gRT = SystemTable->RuntimeServices;
 
-	DebugPrint(DEBUG_INFO, "[CATALYST] Welcome to Catalyst - Inexorable Hypervisor\n");
+	DebugPrint0402("[CATALYST] Welcome to Catalyst - Inexorable Hypervisor\n");
 
 	//
 	// Construct page tables for guest.
 	//
 	EFI_STATUS Status = MapMemory();
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to map memory: %r\n", Status);
+		DebugPrint0402("[CATALYST] Failed to map memory: %r\n", Status);
 		return Status;
 	}
 
@@ -215,20 +221,16 @@ UefiMain(
 	// Neither way, I don't care. Neither do you.
 	//
 
-	DebugPrint(DEBUG_INFO, "[CATALYST] Initializing APs...\n");
+	DebugPrint0402("[CATALYST] Initializing APs...\n");
 
 	//
 	// All processors must be woken up and ready.
 	//
 	Status = PrepareProcessors();
 	if (EFI_ERROR(Status)) {
-		DebugPrint(DEBUG_ERROR, "[CATALYST] Failed to prepare processors: %r\n", Status);
+		DebugPrint0402("[CATALYST] Failed to prepare processors: %r\n", Status);
 		return Status;
 	}
-
-	//
-	// Virtualize all processors.
-	//
 
 	return EFI_SUCCESS;
 }

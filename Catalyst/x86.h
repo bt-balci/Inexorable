@@ -55,9 +55,8 @@
 	General-purpose VMX area that is aligned to maximum 0x1000 bytes boundary.
 */
 typedef struct {
-	union {
-		UINT32 RevisionIdentifier : 31;
-	};
+	UINT32 RevisionIdentifier;
+	UINT8 Reserved[4092];
 } __attribute__((aligned(4096))) INTEL_VMX_REGION;
 
 typedef struct {
@@ -112,6 +111,132 @@ typedef struct {
 	UINT32 OffsetHigh;
 	UINT32 Zero;
 } __attribute__((packed)) X86_IDT_ENTRY;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 MemoryType : 3;
+		UINT64 PageWalkLength : 3;
+		UINT64 DirtyAndAccessEnabled : 1;
+		UINT64 Reserved1 : 5;
+		UINT64 Pml4Address : 36;
+		UINT64 Reserved2 : 16;
+	};
+} EPTP;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Read : 1;
+		UINT64 Write : 1;
+		UINT64 Execute : 1;
+		UINT64 Reserved1 : 5;
+		UINT64 Accessed : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 ExecuteUser : 1;
+		UINT64 Ignored2 : 1;
+		UINT64 PhysicalAddress : 36;
+		UINT64 Reserved2 : 4;
+		UINT64 Ignored3 : 12;
+	};
+} EPT_PML4;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Read : 1;
+		UINT64 Write : 1;
+		UINT64 Execute : 1;
+		UINT64 Reserved1 : 5;
+		UINT64 Accessed : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 ExecuteUser : 1;
+		UINT64 Ignored2 : 1;
+		UINT64 PhysicalAddress : 36;
+		UINT64 Reserved2 : 4;
+		UINT64 Ignored3 : 12;
+	};
+} EPT_PDPTE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Read : 1;
+		UINT64 Write : 1;
+		UINT64 Execute : 1;
+		UINT64 MemoryType : 3;
+		UINT64 IgnorePAT : 1;
+		UINT64 Large : 1;
+		UINT64 Accessed : 1;
+		UINT64 Dirty : 1;
+		UINT64 ExecuteUser : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 Reserved1 : 18;
+		UINT64 PhysicalAddress : 18;
+		UINT64 Reserved2 : 4;
+		UINT64 Ignored3 : 11;
+		UINT64 SuppressVE : 1;
+	};
+} EPT_LARGE_PDPTE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Read : 1;
+		UINT64 Write : 1;
+		UINT64 Execute : 1;
+		UINT64 Reserved1 : 4;
+		UINT64 MustBeZero : 1;
+		UINT64 Accessed : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 ExecuteUser : 1;
+		UINT64 Ignore21 : 1;
+		UINT64 PhysicalAddress : 36;
+		UINT64 Reserved3 : 4;
+		UINT64 Ignored3 : 12;
+	};
+} EPT_PDE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Read : 1;
+		UINT64 Write : 1;
+		UINT64 Execute : 1;
+		UINT64 MemoryType : 3;
+		UINT64 IgnorePAT : 1;
+		UINT64 Large : 1;
+		UINT64 Accessed : 1;
+		UINT64 Dirty : 1;
+		UINT64 ExecuteUser : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 Reserved2 : 9;
+		UINT64 PhysicalAddress : 27;
+		UINT64 Reserved3 : 4;
+		UINT64 Ignored3 : 11;
+		UINT64 SuppressVE : 1;
+	};
+} EPT_LARGE_PDE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Read : 1;
+		UINT64 Write : 1;
+		UINT64 Execute : 1;
+		UINT64 EptMemoryType : 3;
+		UINT64 IgnorePAT : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 Accessed : 1;
+		UINT64 Dirty : 1;
+		UINT64 ExecuteUser : 1;
+		UINT64 Ignored2 : 1;
+		UINT64 PhysicalAddress : 36;
+		UINT64 Reserved2 : 4;
+		UINT64 Ignored3 : 11;
+		UINT64 SuppressVE : 1;
+	};
+} EPT_PTE;
 
 /*
 	All x86 general purpose registers + Xmm0-5 because they are volatile in Microsoft x64 Calling Convention
@@ -220,8 +345,10 @@ typedef struct {
 
 #define IA32_SYSENTER_EIP 0x176
 
-#define IA32_APIC_BASE 0x1B
 
+#define IA32_APIC_BASE 0x1B
+#define APIC_BASE_ENABLE_X2APIC     (1ULL << 10)
+#define APIC_BASE_APIC_GLOBAL_EN    (1ULL << 11)
 
 #define IA32_X2APIC_ICR 0x830
 
@@ -319,36 +446,46 @@ inline VOID __writemsr(UINT32 msr, UINT64 val) {
 	);
 }
 
-inline UINT8 __vmx_on(UINT64* phys_addr) {
-	UINT8 cf;
+inline UINT8 __vmx_on(UINT64 phys_addr) {
+	UINT8 error;
 	__asm__ __volatile__(
-		"vmxon %1; setc %0"
-		: "=q"(cf)
-		: "m"(*phys_addr)
+		"vmxon %1\n\t"
+		"jc 1f\n\t"
+		"jz 2f\n\t"
+		"movb $0, %0\n\t"
+		"jmp 3f\n"
+		"1:\n\t"
+		"movb $2, %0\n\t"
+		"jmp 3f\n"
+		"2:\n\t"
+		"movb $1, %0\n"
+		"3:"
+		: "=q" (error)
+		: "m" (phys_addr)
 		: "memory", "cc"
 	);
-	return cf;
+	return error; // 0 = Success, 1 = VMfailValid, 2 = VMfailInvalid
 }
 
-inline UINT8 __vmx_vmclear(UINT64* vmcs_physical_address) {
+inline UINT8 __vmx_vmclear(UINT64 vmcs_physical_address) {
 	UINT8 error;
 	__asm__ __volatile__(
 		"vmclear %[vmcs]\n\t"
 		"setna %[err]"
 		: [err] "=rm" (error)
-		: [vmcs] "m" (*vmcs_physical_address)
+		: [vmcs] "m" (vmcs_physical_address)
 		: "cc", "memory"
 	);
 	return error;
 }
 
-inline UINT8 __vmx_vmptrld(UINT64* vmcs_physical_address) {
+inline UINT8 __vmx_vmptrld(UINT64 vmcs_physical_address) {
 	UINT8 error;
 	__asm__ __volatile__(
 		"vmptrld %[vmcs]\n\t"
 		"setna %[err]"
 		: [err] "=rm" (error)
-		: [vmcs] "m" (*vmcs_physical_address)
+		: [vmcs] "m" (vmcs_physical_address)
 		: "cc", "memory"
 	);
 	return error;
@@ -438,6 +575,14 @@ inline UINT64 AsmLoadSegmentAccessRights(UINT64 Selector) {
 		: "cc"
 	);
 	return Result;
+}
+
+inline VOID __outb(UINT16 port, UINT8 value) {
+	__asm__ __volatile__(
+		"outb %0, %1"
+		:
+	: "a"(value), "Nd"(port)
+		);
 }
 
 #endif

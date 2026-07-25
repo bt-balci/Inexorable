@@ -15,4 +15,11 @@ extern CONST UINT8 g_InexorableEfi[];
 
 extern CONST UINTN g_InexorableEfiSize;
 
+UINTN
+EFIAPI
+DebugPrint0402(
+    IN CONST CHAR8* Format,
+    ...
+);
+
 #endif
