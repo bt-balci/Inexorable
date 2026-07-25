@@ -36,10 +36,9 @@ typedef struct {
 	X86_CONTEXT_AREA Context;
 
 	struct {
-		X86_IDT_ENTRY Idt[256];
-		X86_GDT_ENTRY Gdt[3];
-	} DescriptorTables;
-
+		__attribute__((aligned(4096))) X86_IDT_ENTRY Idt[256];
+		__attribute__((aligned(4096))) X86_GDT_ENTRY Gdt[3];
+	} DescriptorTables;	
 
 	struct {
 		UINT8 MsrBitmap[0x1000];

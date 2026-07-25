@@ -22,13 +22,13 @@ DumpVmcs(
 	do { \
 		UINT64 _val = 0; \
 		if (__vmx_vmread(Field, &_val) == 0) \
-			DebugPrint0402("[CATALYST] %a = 0x%x\n", Name, _val); \
+			DebugPrint0402("[CATALYST] %a = 0x%p\n", Name, _val); \
 		else \
 			DebugPrint0402("[CATALYST] %a = [READ ERROR]\n", Name); \
 	} while (0)
 
 
-	DebugPrint0402("\n--- BEGIN VMCS DUMP ---\n");
+	DebugPrint0402("--- BEGIN VMCS DUMP ---\n");
 
 	//
 	// Controls
@@ -63,12 +63,6 @@ DumpVmcs(
 	DUMP_VMCS_FIELD(HOST_TR_BASE, "HOST_TR_BASE");
 	DUMP_VMCS_FIELD(HOST_GDTR_BASE, "HOST_GDTR_BASE");
 	DUMP_VMCS_FIELD(HOST_IDTR_BASE, "HOST_IDTR_BASE");
-
-	DUMP_VMCS_FIELD(HOST_IA32_EFER_FULL, "HOST_IA32_EFER_FULL");
-
-	DUMP_VMCS_FIELD(HOST_IA32_SYSENTER_CS, "HOST_IA32_EFER_FULL");
-	DUMP_VMCS_FIELD(HOST_IA32_SYSENTER_EIP, "HOST_IA32_SYSENTER_EIP");
-	DUMP_VMCS_FIELD(HOST_IA32_SYSENTER_ESP, "HOST_IA32_SYSENTER_ESP");
 
 	DUMP_VMCS_FIELD(HOST_RIP, "HOST_RIP");
 	DUMP_VMCS_FIELD(HOST_RSP, "HOST_RSP");
@@ -127,9 +121,13 @@ DumpVmcs(
 
 	DUMP_VMCS_FIELD(GUEST_RFLAGS, "GUEST_RFLAGS");
 
-	DUMP_VMCS_FIELD(GUEST_IA32_EFER_FULL, "GUEST_IA32_EFER_FULL");
+	DUMP_VMCS_FIELD(READONLY_GUEST_PHYSICAL_ADDR_FULL, "READONLY_GUEST_PHYSICAL_ADDR_FULL");
+	DUMP_VMCS_FIELD(GUEST_PDPTE0_FULL, "GUEST_PDPTE0_FULL");
+	DUMP_VMCS_FIELD(GUEST_PDPTE1_FULL, "GUEST_PDPTE1_FULL");
+	DUMP_VMCS_FIELD(GUEST_PDPTE2_FULL, "GUEST_PDPTE2_FULL");
+	DUMP_VMCS_FIELD(GUEST_PDPTE3_FULL, "GUEST_PDPTE3_FULL");
 
-	DebugPrint0402("--- END VMCS DUMP ---\n\n");
+	DebugPrint0402("--- END VMCS DUMP ---\n");
 
 #undef DUMP_VMCS_FIELD
 }
@@ -165,10 +163,12 @@ VmExitHandler(
 	if (ExitReason == VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE) {
 		DebugPrint0402("[CATALYST] VMCS is borked\n");
 		DumpVmcs();
+		//DumpEpts();
 	}
 	else if (ExitReason == VMEXIT_REASON_TRIPLE_FAULT) {
 		DebugPrint0402("[CATALYST] Guest triple-faulted\n");
 		DumpVmcs();
+		//DumpEpts();
 	}
 
 	__asm__ __volatile__("hlt");
@@ -320,15 +320,15 @@ SetupVmcs(
 
 	AsmReadIdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_IDTR_BASE, Descriptor.Base);
+	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)TranslateAddress(Descriptor.Base));
 	__vmx_vmwrite(GUEST_IDTR_LIMIT, Descriptor.Limit);
 
 	AsmReadGdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_TR_BASE, GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr())));
-
-	__vmx_vmwrite(GUEST_GDTR_BASE, Descriptor.Base);
+	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)TranslateAddress(Descriptor.Base));
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
+
+	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)TranslateAddress(GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()))));
 
 	//
 	// Intel's propaganda to force everyone to use sysenter again.
@@ -349,11 +349,11 @@ SetupVmcs(
 	// Test
 	//
 	UINT8* GuestAddress = TranslateAddress(0x1000);
-	*GuestAddress = 0xF4; // HLT
+	GuestAddress[0] = 0xF4; // HLT
 	__vmx_vmwrite(GUEST_RIP, 0x1000);
-	__vmx_vmwrite(GUEST_RSP, 0);
+	__vmx_vmwrite(GUEST_RSP, 0x2000);
 
-	DebugPrint0402("[CATALYST] GUEST_RIP = 0x%x, GUEST_RSP = 0x%x\n", GuestAddress, 0);
+	DebugPrint0402("[CATALYST] GUEST_RIP = 0x%x, GUEST_RSP = 0x%x\n", GuestAddress, 0x2000);
 
 	UINT64 Error = __vmx_vmlaunch();
 	UINT64 ErrorExtended = 0;
@@ -458,13 +458,14 @@ PrepareProcessor(
 
 	AsmWriteIdtr(&Temp);
 
+	MapSinglePage((UINT64)&Cpu->DescriptorTables.Idt, g_CurrentVirtualAddress, FALSE);
+	g_CurrentVirtualAddress += 0x1000;
 	//
 	// Setup GDT.
-	// Or don't.
 	//
 
-	/*
-	Cpu->DescriptorTables.Gdt[GDT_INDEX_NULL] = (X86_GDT_ENTRY){0};
+	
+	Cpu->DescriptorTables.Gdt[GDT_INDEX_NULL]			= (X86_GDT_ENTRY){0};
 	Cpu->DescriptorTables.Gdt[GDT_INDEX_KERNEL_CODE]	= CreateGdtEntry(0, 0xFFFFF, TRUE,	TRUE, 0, TRUE,	 FALSE, TRUE);
 	Cpu->DescriptorTables.Gdt[GDT_INDEX_KERNEL_DATA]	= CreateGdtEntry(0, 0xFFFFF, FALSE, TRUE, 0, FALSE,	 TRUE,  TRUE);
 
@@ -476,10 +477,10 @@ PrepareProcessor(
 
 	DebugPrint0402("[CATALYST] New GDT.Base = %p, New GDT.Limit = %d\n", Temp.Base, Temp.Limit);
 
-	AsmWriteGdtr(&Temp);
+	MapSinglePage((UINT64)&Cpu->DescriptorTables.Gdt, g_CurrentVirtualAddress, FALSE);
+	g_CurrentVirtualAddress += 0x1000;
 
 	DebugPrint0402("[CATALYST] Ds = %d, Ss = %d, Cs = %d\n", KERNEL_DS_SELECTOR, KERNEL_DS_SELECTOR, KERNEL_CS_SELECTOR);
-	*/
 
 	//
 	// Read VMX revision ID.

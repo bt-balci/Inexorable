@@ -18,6 +18,161 @@ UINT32 g_EpdptCount    = 0;
 UINT32 g_EpdeCount     = 0;
 UINT32 g_EpteCount     = 0;
 
+VOID
+EFIAPI
+DumpEpts(
+    VOID
+) {
+#define DUMP_EPT_FIELD(Entry, Field, Name) \
+    DebugPrint0402("[CATALYST] %a = 0x%x\n", Name, (Entry).Field)
+
+    DebugPrint0402("--- BEGIN EPT DUMP ---\n");
+
+    //
+    // EPTP
+    //
+    DebugPrint0402("[CATALYST] EPTP:\n");
+    DUMP_EPT_FIELD(g_Eptp, MemoryType, "MemoryType");
+    DUMP_EPT_FIELD(g_Eptp, PageWalkLength, "PageWalkLength");
+    DUMP_EPT_FIELD(g_Eptp, DirtyAndAccessEnabled, "DirtyAndAccessEnabled");
+    DebugPrint0402("[CATALYST] Pml4Address (raw) = 0x%x\n", g_Eptp.Pml4Address);
+    DebugPrint0402("[CATALYST] PML4 base = 0x%p\n", (UINT64)(g_Eptp.Pml4Address) << 12);
+
+    //
+    // Walk the PML4 table
+    //
+    for (UINT32 Pml4Idx = 0; Pml4Idx < 512; Pml4Idx++) {
+        EPT_PML4* Pml4e = &g_Epml4[Pml4Idx];
+        if (!Pml4e->Present) {
+            continue;
+        }
+
+        DebugPrint0402("[CATALYST] PML4[%d]:\n", Pml4Idx);
+        DUMP_EPT_FIELD((*Pml4e), Read, "Read");
+        DUMP_EPT_FIELD((*Pml4e), Write, "Write");
+        DUMP_EPT_FIELD((*Pml4e), Execute, "Execute");
+        DUMP_EPT_FIELD((*Pml4e), Present, "Present");
+        DUMP_EPT_FIELD((*Pml4e), ExecuteUser, "ExecuteUser");
+        DebugPrint0402("[CATALYST] PhysicalAddress (raw) = 0x%x\n", Pml4e->PhysicalAddress);
+
+        UINT64 PdptBase = (UINT64)Pml4e->PhysicalAddress << 12;
+        DebugPrint0402("[CATALYST] PDPT base = 0x%p\n", PdptBase);
+
+        //
+        // Locate the PDPT pool used by this PML4 entry
+        //
+        INT32 PdptPool = -1;
+        for (UINT32 j = 0; j < g_EpdptCount; j++) {
+            if (PdptBase == (UINT64)&g_Epdpt[j][0]) {
+                PdptPool = (INT32)j;
+                break;
+            }
+        }
+        if (PdptPool < 0) {
+            DebugPrint0402("[CATALYST] ERROR: PDPT pool not found!\n");
+            continue;
+        }
+
+        //
+        // Walk the PDPT entries
+        //
+        for (UINT32 PdptIdx = 0; PdptIdx < 512; PdptIdx++) {
+            EPT_PDPTE* Pdpte = &g_Epdpt[PdptPool][PdptIdx];
+            if (!Pdpte->Present) {
+                continue;
+            }
+
+            DebugPrint0402("[CATALYST] PDPT[%d] (pool %d):\n", PdptIdx, PdptPool);
+            DUMP_EPT_FIELD((*Pdpte), Read, "Read");
+            DUMP_EPT_FIELD((*Pdpte), Write, "Write");
+            DUMP_EPT_FIELD((*Pdpte), Execute, "Execute");
+            DUMP_EPT_FIELD((*Pdpte), Present, "Present");
+            DUMP_EPT_FIELD((*Pdpte), ExecuteUser, "ExecuteUser");
+            DebugPrint0402("[CATALYST] PhysicalAddress (raw) = 0x%x\n", Pdpte->PhysicalAddress);
+
+            UINT64 PdBase = (UINT64)Pdpte->PhysicalAddress << 12;
+            DebugPrint0402("[CATALYST] PD base = 0x%p\n", PdBase);
+
+            //
+            // Locate the PDE pool used by this PDPT entry
+            //
+            INT32 PdePool = -1;
+            for (UINT32 m = 0; m < g_EpdeCount; m++) {
+                if (PdBase == (UINT64)&g_Epde[m][0]) {
+                    PdePool = (INT32)m;
+                    break;
+                }
+            }
+            if (PdePool < 0) {
+                DebugPrint0402("[CATALYST] ERROR: PDE pool not found!\n");
+                continue;
+            }
+
+            //
+            // Walk the PDE entries (only non‑large 4 KB mappings are used by MapSinglePage. Remember, it's so over)
+            //
+            for (UINT32 PdeIdx = 0; PdeIdx < 512; PdeIdx++) {
+                //
+                // MapSinglePage writes these as EPT_PDE, so read them as such.
+                //
+                EPT_PDE* Pde = (EPT_PDE*)&g_Epde[PdePool][PdeIdx];
+                if (!Pde->Present) {
+                    continue;
+                }
+
+                DebugPrint0402("[CATALYST] PDE[%d] (pool %d):\n", PdeIdx, PdePool);
+                DUMP_EPT_FIELD((*Pde), Read, "Read");
+                DUMP_EPT_FIELD((*Pde), Write, "Write");
+                DUMP_EPT_FIELD((*Pde), Execute, "Execute");
+                DUMP_EPT_FIELD((*Pde), Present, "Present");
+                DUMP_EPT_FIELD((*Pde), ExecuteUser, "ExecuteUser");
+                DebugPrint0402("[CATALYST] PhysicalAddress (raw) = 0x%x\n", Pde->PhysicalAddress);
+
+                UINT64 PtBase = (UINT64)Pde->PhysicalAddress << 12;
+                DebugPrint0402("[CATALYST] PT base = 0x%p\n", PtBase);
+
+                //
+                // Locate the PTE pool used by this PDE entry
+                //
+                INT32 PtePool = -1;
+                for (UINT32 p = 0; p < g_EpteCount; p++) {
+                    if (PtBase == (UINT64)&g_Epte[p][0]) {
+                        PtePool = (INT32)p;
+                        break;
+                    }
+                }
+                if (PtePool < 0) {
+                    DebugPrint0402("[CATALYST] ERROR: PTE pool not found!\n");
+                    continue;
+                }
+
+                //
+                // Walk the PTE entries
+                //
+                for (UINT32 PteIdx = 0; PteIdx < 512; PteIdx++) {
+                    EPT_PTE* Pte = &g_Epte[PtePool][PteIdx];
+                    if (!Pte->Present) {
+                        continue;
+                    }
+
+                    DebugPrint0402("[CATALYST] PTE[%d] (pool %d):\n", PteIdx, PtePool);
+                    DUMP_EPT_FIELD((*Pte), Read, "Read");
+                    DUMP_EPT_FIELD((*Pte), Write, "Write");
+                    DUMP_EPT_FIELD((*Pte), Execute, "Execute");
+                    DUMP_EPT_FIELD((*Pte), EptMemoryType, "EptMemoryType");
+                    DUMP_EPT_FIELD((*Pte), Present, "Present");
+                    DUMP_EPT_FIELD((*Pte), ExecuteUser, "ExecuteUser");
+                    DebugPrint0402("[CATALYST] PhysicalAddress (raw) = 0x%x\n", Pte->PhysicalAddress);
+                    DebugPrint0402("[CATALYST] HPA = 0x%p\n", (UINT64)Pte->PhysicalAddress << 12);
+                }
+            }
+        }
+    }
+
+    DebugPrint0402("--- END EPT DUMP ---\n");
+
+#undef DUMP_EPT_FIELD
+}
 
 /*
     Maybe this shouuld return a BOOLEAN?
@@ -31,6 +186,7 @@ TranslateAddress(
     UINT16 PdptIdx = (GuestPhysicalAddress >> 30) & 0x1FF;
     UINT16 PdIdx = (GuestPhysicalAddress >> 21) & 0x1FF;
     UINT16 PtIdx = (GuestPhysicalAddress >> 12) & 0x1FF;
+    UINT16 Offset = (GuestPhysicalAddress) & 0xFFF;
 
     DebugPrint0402("[CATALYST] Translating GPA = 0x%p to HPA. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", 
         GuestPhysicalAddress, Pml4Idx, PdptIdx, PdIdx, PtIdx);
@@ -60,13 +216,12 @@ TranslateAddress(
     if (!Pt->Present)
         return NULL;
 
-    UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12);
+    UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12) + Offset;
 
-    DebugPrint0402("[CATALYST] GPA = 0x%p, translates to HPA = 0x%p\n", GuestPhysicalAddress, Result);;
+    DebugPrint0402("[CATALYST] GPA = 0x%p, translates to HPA = 0x%p\n", GuestPhysicalAddress, Result);
     return (VOID*)Result;
 }
 
-STATIC
 VOID
 EFIAPI
 MapSinglePage(

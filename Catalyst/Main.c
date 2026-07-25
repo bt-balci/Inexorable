@@ -25,6 +25,7 @@ CONST UINT8 g_InexorableEfi[] = {
  #embed "../x64/Debug/inexorable.efi"
 };
 CONST UINTN g_InexorableEfiSize = sizeof(g_InexorableEfi);
+UINT64 g_CurrentVirtualAddress;
 
 CATALYST_VIRTUAL_CPU VirtualProcessors[CONFIG_CPU_COUNT] = {0};
 
@@ -74,7 +75,7 @@ PrepareProcessors(
 	//
 	// Index = 1 to skip the BSP (current processor).
 	//
-	for (UINT32 i = 1; i < CONFIG_CPU_COUNT; i++) {
+	for (UINTN i = 1; i < CONFIG_CPU_COUNT; i++) {
 		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[i];
 
 		DebugPrint0402("[CATALYST] Starting AP %d...\n", i);
@@ -153,8 +154,6 @@ MapMemory(
 	//
 	// We will map everything from 0. As if there is contiguous, linear memory for the guest.
 	//
-	UINT64 CurrentVirtualAddress = 0;
-
 	for (UINTN i = 0; i < NumEntries; i++) {
 		//
 		// Exclude everything except EfiConventionalMemory. We don't want to bork ourselves.
@@ -168,11 +167,11 @@ MapMemory(
 			UINT64 PhysicalStart	= Desc->PhysicalStart;
 			UINT64 NumberOfPages	= Desc->NumberOfPages;
 			
-			DebugPrint0402("[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, CurrentVirtualAddress);
+			DebugPrint0402("[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, g_CurrentVirtualAddress);
 			
-			MapPagesLinear(PhysicalStart, NumberOfPages, &CurrentVirtualAddress);
+			MapPagesLinear(PhysicalStart, NumberOfPages, &g_CurrentVirtualAddress);
 
-			DebugPrint0402("[CATALYST] Mapped %d pages, new cursor: %p\n", NumberOfPages, CurrentVirtualAddress);
+			DebugPrint0402("[CATALYST] Mapped %d pages, new cursor: %p\n", NumberOfPages, g_CurrentVirtualAddress);
 		}
 
 		Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Desc + DescriptorSize);

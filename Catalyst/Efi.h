@@ -15,6 +15,8 @@ extern CONST UINT8 g_InexorableEfi[];
 
 extern CONST UINTN g_InexorableEfiSize;
 
+extern UINT64 g_CurrentVirtualAddress;
+
 UINTN
 EFIAPI
 DebugPrint0402(

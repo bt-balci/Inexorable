@@ -21,6 +21,20 @@ __attribute__((aligned(4096))) extern EPT_PTE		    g_Epte[16384][512];
 
 VOID
 EFIAPI
+DumpEpts(
+    VOID
+);
+
+VOID
+EFIAPI
+MapSinglePage(
+    IN UINT64   GuestPhysical,
+    IN UINT64   HostPhysical,
+    IN BOOLEAN  Big
+);
+
+VOID
+EFIAPI
 MapPagesLinear(
     IN UINT64                       PhysicalStart,
     IN UINT64                       NumberOfPages,
