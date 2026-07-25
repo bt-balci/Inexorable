@@ -248,7 +248,7 @@ SetupVmcs(
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps | ProcessorBasedHltExiting)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
+		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid)));
 
 	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
@@ -443,21 +443,12 @@ PrepareProcessor(
 
 	//
 	// Set the interrupt handler for sexy ACPI shenanigans.
-	// Or don't.
-	// Or do, I guess.
 	//
 	Cpu->DescriptorTables.Idt[209] = GenerateIdtEntry((UINT64)0, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
 
 	//
 	// Load IDT.
 	//
-	Descriptor.Base = (UINTN)&Cpu->DescriptorTables.Idt;
-	Descriptor.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Idt) - 1);
-
-	DebugPrint0402("[CATALYST] New IDT.Base = %p, New IDT.Limit = %d\n", Descriptor.Base, Descriptor.Limit);
-
-	AsmWriteIdtr(&Descriptor);
-
 	MapSinglePage((UINT64)&Cpu->DescriptorTables.Idt, g_CurrentVirtualAddress, FALSE);
 	Cpu->DescriptorTables.IdtBase = (VOID*)g_CurrentVirtualAddress;
 	g_CurrentVirtualAddress += 0x1000;
