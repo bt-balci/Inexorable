@@ -164,8 +164,8 @@ MapMemory(
 			Desc->Type == EfiLoaderCode ||
 			Desc->Type == EfiLoaderData*/)
 		{
-			UINT64 PhysicalStart	= Desc->PhysicalStart;
-			UINT64 NumberOfPages	= Desc->NumberOfPages;
+			UINT64 PhysicalStart = Desc->PhysicalStart;
+			UINT64 NumberOfPages = Desc->NumberOfPages;
 			
 			DebugPrint0402("[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, g_CurrentVirtualAddress);
 			

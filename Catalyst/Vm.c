@@ -170,8 +170,23 @@ VmExitHandler(
 		DumpVmcs();
 		//DumpEpts();
 	}
+	else if (ExitReason == VMEXIT_REASON_EXCEPTION_OR_NMI) {
+		VMX_INTERRUPTION_INFORMATION InterruptionInfo = { 0 };
+		__vmx_vmread(READONLY_VMEXIT_INTERRUPTION_INFO, (UINT64*)&InterruptionInfo.All);
+		DebugPrint0402("[CATALYST] Guest exception occured. Vector = %d, Type = %d, Deliver = %d, Valid = %d\n",
+			InterruptionInfo.Vector, InterruptionInfo.Type, InterruptionInfo.DeliverErrorCode, InterruptionInfo.Valid);
 
-	__asm__ __volatile__("hlt");
+		if (InterruptionInfo.Vector == 14) {
+			VMX_PAGE_FAULT_ERROR_CODE PageFaultErrorCode = { 0 };
+			__vmx_vmread(PAGE_FAULT_ERR_CODE_MASK, (UINT64*)&PageFaultErrorCode.All);
+
+			DebugPrint0402("[CATALYST] Page Fault occured. Present = %d, Write = %d, User = %d, ReservedBitSet = %d, NxViolation = %d, ProtectionKeyInvalid = %d\n",
+				PageFaultErrorCode.Present, PageFaultErrorCode.Write, PageFaultErrorCode.User,
+				PageFaultErrorCode.ReservedBitSet, PageFaultErrorCode.NxViolation, PageFaultErrorCode.ProtectionKeyViolation);
+
+			__asm__ __volatile__("hlt");
+		}
+	}
 }
 
 STATIC
@@ -248,10 +263,11 @@ SetupVmcs(
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps | ProcessorBasedHltExiting)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid)));
+		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
 
 	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
+	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT32);
 
 	//
 	// Initialize host.

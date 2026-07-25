@@ -238,6 +238,30 @@ typedef union {
 	};
 } EPT_PTE;
 
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 Vector : 8;
+		UINT32 Type : 3;
+		UINT32 DeliverErrorCode : 1;
+		UINT32 Reserved : 19;
+		UINT32 Valid : 1;
+	};
+} VMX_INTERRUPTION_INFORMATION;
+
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 Present : 1;
+		UINT32 Write : 1;
+		UINT32 User : 1;
+		UINT32 ReservedBitSet : 1;
+		UINT32 NxViolation : 1;
+		UINT32 ProtectionKeyViolation : 1;
+		UINT32 Reserved : 26;
+	};
+} VMX_PAGE_FAULT_ERROR_CODE;
+
 /*
 	All x86 general purpose registers + Xmm0-5 because they are volatile in Microsoft x64 Calling Convention
 */
