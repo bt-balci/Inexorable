@@ -320,15 +320,15 @@ SetupVmcs(
 
 	AsmReadIdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)TranslateAddress(Descriptor.Base));
+	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)Cpu->DescriptorTables.IdtBase);
 	__vmx_vmwrite(GUEST_IDTR_LIMIT, Descriptor.Limit);
 
 	AsmReadGdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)TranslateAddress(Descriptor.Base));
+	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)Cpu->DescriptorTables.GdtBase);
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
 
-	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)TranslateAddress(GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()))));
+	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)Cpu->DescriptorTables.TssBase);
 
 	//
 	// Intel's propaganda to force everyone to use sysenter again.
@@ -431,15 +431,15 @@ PrepareProcessor(
 	//
 	// Setup IDT.
 	//
-	IA32_DESCRIPTOR Temp = { 0 };
-	AsmReadIdtr(&Temp);
+	IA32_DESCRIPTOR Descriptor = { 0 };
+	AsmReadIdtr(&Descriptor);
 
-	DebugPrint0402("[CATALYST] IDT.Base = %p, IDT.Limit = %d\n", Temp.Base, Temp.Limit);
+	DebugPrint0402("[CATALYST] IDT.Base = %p, IDT.Limit = %d\n", Descriptor.Base, Descriptor.Limit);
 
 	//
 	// Copy the default IDT.
 	//
-	CopyMem(&Cpu->DescriptorTables.Idt, (VOID*)Temp.Base, Temp.Limit + 1);
+	CopyMem(&Cpu->DescriptorTables.Idt, (VOID*)Descriptor.Base, Descriptor.Limit + 1);
 
 	//
 	// Set the interrupt handler for sexy ACPI shenanigans.
@@ -451,36 +451,35 @@ PrepareProcessor(
 	//
 	// Load IDT.
 	//
-	Temp.Base = (UINTN)&Cpu->DescriptorTables.Idt;
-	Temp.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Idt) - 1);
+	Descriptor.Base = (UINTN)&Cpu->DescriptorTables.Idt;
+	Descriptor.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Idt) - 1);
 
-	DebugPrint0402("[CATALYST] New IDT.Base = %p, New IDT.Limit = %d\n", Temp.Base, Temp.Limit);
+	DebugPrint0402("[CATALYST] New IDT.Base = %p, New IDT.Limit = %d\n", Descriptor.Base, Descriptor.Limit);
 
-	AsmWriteIdtr(&Temp);
+	AsmWriteIdtr(&Descriptor);
 
 	MapSinglePage((UINT64)&Cpu->DescriptorTables.Idt, g_CurrentVirtualAddress, FALSE);
+	Cpu->DescriptorTables.IdtBase = (VOID*)g_CurrentVirtualAddress;
 	g_CurrentVirtualAddress += 0x1000;
-	//
-	// Setup GDT.
-	//
-
-	
-	Cpu->DescriptorTables.Gdt[GDT_INDEX_NULL]			= (X86_GDT_ENTRY){0};
-	Cpu->DescriptorTables.Gdt[GDT_INDEX_KERNEL_CODE]	= CreateGdtEntry(0, 0xFFFFF, TRUE,	TRUE, 0, TRUE,	 FALSE, TRUE);
-	Cpu->DescriptorTables.Gdt[GDT_INDEX_KERNEL_DATA]	= CreateGdtEntry(0, 0xFFFFF, FALSE, TRUE, 0, FALSE,	 TRUE,  TRUE);
 
 	//
 	// Load GDT.
 	//
-	Temp.Base = (UINTN)&Cpu->DescriptorTables.Gdt;
-	Temp.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Gdt) - 1);
-
-	DebugPrint0402("[CATALYST] New GDT.Base = %p, New GDT.Limit = %d\n", Temp.Base, Temp.Limit);
+	Descriptor.Base = (UINTN)&Cpu->DescriptorTables.Gdt;
+	Descriptor.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Gdt) - 1);
 
 	MapSinglePage((UINT64)&Cpu->DescriptorTables.Gdt, g_CurrentVirtualAddress, FALSE);
+	Cpu->DescriptorTables.GdtBase = (VOID*)g_CurrentVirtualAddress;
 	g_CurrentVirtualAddress += 0x1000;
 
-	DebugPrint0402("[CATALYST] Ds = %d, Ss = %d, Cs = %d\n", KERNEL_DS_SELECTOR, KERNEL_DS_SELECTOR, KERNEL_CS_SELECTOR);
+	//
+	// Load TSS.
+	//
+	CopyMem(&Cpu->DescriptorTables.Tss, (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr())), 104);
+
+	MapSinglePage((UINT64)&Cpu->DescriptorTables.Tss, g_CurrentVirtualAddress, FALSE);
+	Cpu->DescriptorTables.TssBase = (VOID*)g_CurrentVirtualAddress;
+	g_CurrentVirtualAddress += 0x1000;
 
 	//
 	// Read VMX revision ID.

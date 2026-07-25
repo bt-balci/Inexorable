@@ -35,9 +35,18 @@ typedef struct {
 
 	X86_CONTEXT_AREA Context;
 
+
 	struct {
 		__attribute__((aligned(4096))) X86_IDT_ENTRY Idt[256];
-		__attribute__((aligned(4096))) X86_GDT_ENTRY Gdt[3];
+		__attribute__((aligned(4096))) X86_GDT_ENTRY Gdt[8192];
+		__attribute__((aligned(4096))) UINT8 Tss[104];
+
+		//
+		// These bases are in GPA.
+		//
+		VOID* IdtBase;
+		VOID* GdtBase;
+		VOID* TssBase;
 	} DescriptorTables;	
 
 	struct {
