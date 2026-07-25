@@ -3,12 +3,7 @@
 
 #include <Uefi.h>
 
-
 #include "Vm.h"
-
-//
-// Maybe move to x86.h?
-//
 
 ///////////////////////////////////////////////
 ////				Globals				   ////
@@ -30,6 +25,12 @@ MapPagesLinear(
     IN UINT64                       PhysicalStart,
     IN UINT64                       NumberOfPages,
     IN OUT UINT64*                  CurrentGuestPhysical
+);
+
+VOID*
+EFIAPI
+TranslateAddress(
+    IN UINT64 GuestPhysicalAddress
 );
 
 #endif

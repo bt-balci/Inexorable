@@ -111,8 +111,6 @@ MapMemory(
 	UINT32	DescriptorVersion	= 0;
 	UINTN	DescriptorSize		= 0;
 
-	DebugPrint0402("[CATALYST] Mapping out free memory...\n");
-
 	EFI_STATUS Status = gBS->GetMemoryMap(&MapSize, NULL, &MapKey, &DescriptorSize, &DescriptorVersion);
 	if (Status != EFI_BUFFER_TOO_SMALL) {
 		DebugPrint0402("[CATALYST] Failed to get memory map size: %r\n", Status);
@@ -146,8 +144,11 @@ MapMemory(
 	g_Eptp.DirtyAndAccessEnabled = FALSE;
 	g_Eptp.PageWalkLength = 3;
 	g_Eptp.MemoryType = 6;
-
 	g_Eptp.Pml4Address = ((UINT64)&g_Epml4) >> 12;
+
+	DebugPrint0402("[CATALYST] g_Eptp = 0x%p\n", g_Eptp);
+
+	DebugPrint0402("[CATALYST] Mapping out free memory...\n");
 
 	//
 	// We will map everything from 0. As if there is contiguous, linear memory for the guest.

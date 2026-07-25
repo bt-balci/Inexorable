@@ -13,6 +13,164 @@
 #include "Memory.h"
 
 STATIC
+VOID
+EFIAPI
+DumpVmcs(
+	VOID
+) {
+#define DUMP_VMCS_FIELD(Field, Name) \
+	do { \
+		UINT64 _val = 0; \
+		if (__vmx_vmread(Field, &_val) == 0) \
+			DebugPrint0402("[CATALYST] %a = 0x%x\n", Name, _val); \
+		else \
+			DebugPrint0402("[CATALYST] %a = [READ ERROR]\n", Name); \
+	} while (0)
+
+
+	DebugPrint0402("\n--- BEGIN VMCS DUMP ---\n");
+
+	//
+	// Controls
+	//
+	DUMP_VMCS_FIELD(VMEXIT_CONTROLS, "VMEXIT_CONTROLS");
+	DUMP_VMCS_FIELD(VMENTRY_CONTROLS, "VMENTRY_CONTROLS");
+
+	DUMP_VMCS_FIELD(PRIMARY_PROCBASED_EXEC_CONTROLS, "PRIMARY_PROCBASED_EXEC_CONTROLS");
+	DUMP_VMCS_FIELD(SECONDARY_PROCBASED_EXEC_CONTROLS, "SECONDARY_PROCBASED_EXEC_CONTROLS");
+	DUMP_VMCS_FIELD(PINBASED_EXEC_CONTROLS, "PINBASED_EXEC_CONTROLS");
+
+	DUMP_VMCS_FIELD(EPTP_FULL, "EPTP_FULL");
+	DUMP_VMCS_FIELD(MSR_BITMAPS_ADDR_FULL, "MSR_BITMAPS_ADDR_FULL");
+
+	//
+	// Host
+	//
+	DUMP_VMCS_FIELD(HOST_ES_SELECTOR, "HOST_ES_SELECTOR");
+	DUMP_VMCS_FIELD(HOST_CS_SELECTOR, "HOST_CS_SELECTOR");
+	DUMP_VMCS_FIELD(HOST_SS_SELECTOR, "HOST_SS_SELECTOR");
+	DUMP_VMCS_FIELD(HOST_DS_SELECTOR, "HOST_DS_SELECTOR");
+	DUMP_VMCS_FIELD(HOST_FS_SELECTOR, "HOST_FS_SELECTOR");
+	DUMP_VMCS_FIELD(HOST_GS_SELECTOR, "HOST_GS_SELECTOR");
+	DUMP_VMCS_FIELD(HOST_TR_SELECTOR, "HOST_TR_SELECTOR");
+
+	DUMP_VMCS_FIELD(HOST_CR0, "HOST_CR0");
+	DUMP_VMCS_FIELD(HOST_CR3, "HOST_CR3");
+	DUMP_VMCS_FIELD(HOST_CR4, "HOST_CR4");
+
+	DUMP_VMCS_FIELD(HOST_FS_BASE, "HOST_FS_BASE");
+	DUMP_VMCS_FIELD(HOST_GS_BASE, "HOST_GS_BASE");
+	DUMP_VMCS_FIELD(HOST_TR_BASE, "HOST_TR_BASE");
+	DUMP_VMCS_FIELD(HOST_GDTR_BASE, "HOST_GDTR_BASE");
+	DUMP_VMCS_FIELD(HOST_IDTR_BASE, "HOST_IDTR_BASE");
+
+	DUMP_VMCS_FIELD(HOST_IA32_EFER_FULL, "HOST_IA32_EFER_FULL");
+
+	DUMP_VMCS_FIELD(HOST_IA32_SYSENTER_CS, "HOST_IA32_EFER_FULL");
+	DUMP_VMCS_FIELD(HOST_IA32_SYSENTER_EIP, "HOST_IA32_SYSENTER_EIP");
+	DUMP_VMCS_FIELD(HOST_IA32_SYSENTER_ESP, "HOST_IA32_SYSENTER_ESP");
+
+	DUMP_VMCS_FIELD(HOST_RIP, "HOST_RIP");
+	DUMP_VMCS_FIELD(HOST_RSP, "HOST_RSP");
+
+	//
+	// Guest
+	//
+	DUMP_VMCS_FIELD(GUEST_ES_SELECTOR, "GUEST_ES_SELECTOR");
+	DUMP_VMCS_FIELD(GUEST_SS_SELECTOR, "GUEST_SS_SELECTOR");
+	DUMP_VMCS_FIELD(GUEST_DS_SELECTOR, "GUEST_DS_SELECTOR");
+	DUMP_VMCS_FIELD(GUEST_LDTR_SELECTOR, "GUEST_LDTR_SELECTOR");
+
+	DUMP_VMCS_FIELD(GUEST_TR_SELECTOR, "GUEST_TR_SELECTOR");
+	DUMP_VMCS_FIELD(GUEST_FS_SELECTOR, "GUEST_FS_SELECTOR");
+	DUMP_VMCS_FIELD(GUEST_GS_SELECTOR, "GUEST_GS_SELECTOR");
+	DUMP_VMCS_FIELD(GUEST_CS_SELECTOR, "GUEST_CS_SELECTOR");
+
+	DUMP_VMCS_FIELD(GUEST_ES_LIMIT, "GUEST_ES_LIMIT");
+	DUMP_VMCS_FIELD(GUEST_SS_LIMIT, "GUEST_SS_LIMIT");
+	DUMP_VMCS_FIELD(GUEST_DS_LIMIT, "GUEST_DS_LIMIT");
+	DUMP_VMCS_FIELD(GUEST_CS_LIMIT, "GUEST_CS_LIMIT");
+
+	DUMP_VMCS_FIELD(GUEST_FS_LIMIT, "GUEST_FS_LIMIT");
+	DUMP_VMCS_FIELD(GUEST_GS_LIMIT, "GUEST_GS_LIMIT");
+	DUMP_VMCS_FIELD(GUEST_TR_LIMIT, "GUEST_TR_LIMIT");
+
+	DUMP_VMCS_FIELD(GUEST_ES_ACCESS_RIGHTS, "GUEST_ES_ACCESS_RIGHTS");
+	DUMP_VMCS_FIELD(GUEST_CS_ACCESS_RIGHTS, "GUEST_CS_ACCESS_RIGHTS");
+	DUMP_VMCS_FIELD(GUEST_SS_ACCESS_RIGHTS, "GUEST_SS_ACCESS_RIGHTS");
+	DUMP_VMCS_FIELD(GUEST_DS_ACCESS_RIGHTS, "GUEST_DS_ACCESS_RIGHTS");
+	DUMP_VMCS_FIELD(GUEST_FS_ACCESS_RIGHTS, "GUEST_FS_ACCESS_RIGHTS");
+	DUMP_VMCS_FIELD(GUEST_GS_ACCESS_RIGHTS, "GUEST_GS_ACCESS_RIGHTS");
+	DUMP_VMCS_FIELD(GUEST_TR_ACCESS_RIGHTS, "GUEST_TR_ACCESS_RIGHTS");
+	DUMP_VMCS_FIELD(GUEST_LDTR_ACCESS_RIGHTS, "GUEST_LDTR_ACCESS_RIGHTS");
+
+	DUMP_VMCS_FIELD(GUEST_FS_BASE, "GUEST_FS_BASE");
+	DUMP_VMCS_FIELD(GUEST_GS_BASE, "GUEST_GS_BASE");
+
+	DUMP_VMCS_FIELD(GUEST_IDTR_BASE, "GUEST_IDTR_BASE");
+	DUMP_VMCS_FIELD(GUEST_IDTR_LIMIT, "GUEST_IDTR_LIMIT");
+
+	DUMP_VMCS_FIELD(GUEST_TR_BASE, "GUEST_TR_BASE");
+
+	DUMP_VMCS_FIELD(GUEST_GDTR_BASE, "GUEST_GDTR_BASE");
+	DUMP_VMCS_FIELD(GUEST_GDTR_LIMIT, "GUEST_GDTR_LIMIT");
+
+	DUMP_VMCS_FIELD(GUEST_IA32_SYSENTER_CS, "GUEST_IA32_SYSTENTER_CS");
+	DUMP_VMCS_FIELD(GUEST_IA32_SYSENTER_EIP, "GUEST_IA32_SYSENTER_EIP");
+	DUMP_VMCS_FIELD(GUEST_IA32_SYSENTER_ESP, "GUEST_IA32_SYSENTER_ESP");
+
+	DUMP_VMCS_FIELD(GUEST_LINK_PTR_FULL, "GUEST_LINK_PTR_FULL");
+
+	DUMP_VMCS_FIELD(GUEST_CR0, "GUEST_CR0");
+	DUMP_VMCS_FIELD(GUEST_CR3, "GUEST_CR3");
+	DUMP_VMCS_FIELD(GUEST_CR4, "GUEST_CR4");
+
+	DUMP_VMCS_FIELD(GUEST_RFLAGS, "GUEST_RFLAGS");
+
+	DUMP_VMCS_FIELD(GUEST_IA32_EFER_FULL, "GUEST_IA32_EFER_FULL");
+
+	DebugPrint0402("--- END VMCS DUMP ---\n\n");
+
+#undef DUMP_VMCS_FIELD
+}
+
+VOID
+VmExitHandler(
+	
+) {
+	//
+	// Get arguments.
+	//
+	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)_readgsbase_u64();
+
+	UINT64 ExitQualification	= 0;
+	UINT64 ExitReason			= 0;
+	UINT64 ExitInstructionLen	= 0;
+
+	__vmx_vmread(READONLY_EXIT_QUALIFICATION,		&ExitQualification);
+	__vmx_vmread(READONLY_EXIT_REASON,				&ExitReason);
+	__vmx_vmread(READONLY_VMEXIT_INSTRUCTION_LEN,	&ExitInstructionLen);
+
+	__vmx_vmread(GUEST_RIP,	&Cpu->Context.Rip);
+	__vmx_vmread(GUEST_RSP,	&Cpu->Context.Rsp);
+
+	//
+	// Get basic exit reason.
+	//
+	ExitReason &= 0xFFFF;
+
+	DebugPrint0402("[CATALYST] VMEXIT: Reason = %d, Qualification = %d, ExitInstructionLen = %d, GuestRip = %x, GuestRsp = %x\n",
+		ExitReason, ExitQualification, ExitInstructionLen, Cpu->Context.Rip, Cpu->Context.Rsp);
+
+	if (ExitReason == VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE) {
+		DebugPrint0402("[CATALYST] VMCS is borked\n");
+		DumpVmcs();
+	}
+
+	__asm__ __volatile__("hlt");
+}
+
+STATIC
 UINT64
 AdjustVmcsControl(
 	IN UINT64	Control,
@@ -20,7 +178,7 @@ AdjustVmcsControl(
 ) {
 	UINT64 VmxBasic = __readmsr(IA32_VMX_BASIC);
 
-	BOOLEAN TrueCapabilitySupported = (VmxBasic & (1ULL << 55)) == 1;
+	BOOLEAN TrueCapabilitySupported = (VmxBasic & (1ULL << 55)) != 0;
 	UINT32 CapabilityMsr = 0;
 
 	if (Control == PINBASED_EXEC_CONTROLS && TrueCapabilitySupported) {
@@ -79,20 +237,21 @@ SetupVmcs(
 	//
 	// Initialize controls.
 	//
-
 	__vmx_vmwrite(VMEXIT_CONTROLS, AdjustVmcsControl(VMEXIT_CONTROLS, VmExitHostAddressSpaceSize));
 	__vmx_vmwrite(VMENTRY_CONTROLS, AdjustVmcsControl(VMENTRY_CONTROLS, VmEntryIa32eModeGuest));
 	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, 0));
 
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps)));
+		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps | ProcessorBasedHltExiting)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
+
+	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
+	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
 
 	//
 	// Initialize host.
 	//
-
 	__vmx_vmwrite(HOST_ES_SELECTOR, AsmReadEs());
 	__vmx_vmwrite(HOST_CS_SELECTOR, AsmReadCs());
 	__vmx_vmwrite(HOST_SS_SELECTOR, AsmReadSs());
@@ -105,8 +264,8 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_CR3, __readcr3());
 	__vmx_vmwrite(HOST_CR4, __readcr4());
 
-	__vmx_vmwrite(HOST_FS_BASE, (UINT64)Cpu);
-	__vmx_vmwrite(HOST_GS_BASE, 0);
+	__vmx_vmwrite(HOST_FS_BASE, 0);
+	__vmx_vmwrite(HOST_GS_BASE, (UINT64)Cpu);
 
 	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadGdtr(&Descriptor);
@@ -118,14 +277,22 @@ SetupVmcs(
 
 	__vmx_vmwrite(HOST_IDTR_BASE, Descriptor.Base);
 
+	__vmx_vmwrite(HOST_IA32_EFER_FULL,		__readmsr(IA32_EFER));
+
+	__vmx_vmwrite(HOST_IA32_SYSENTER_CS,	__readmsr(IA32_SYSENTER_CS));
+	__vmx_vmwrite(HOST_IA32_SYSENTER_EIP,	__readmsr(IA32_SYSENTER_EIP));
+	__vmx_vmwrite(HOST_IA32_SYSENTER_ESP,	__readmsr(IA32_SYSENTER_ESP));
+
+	__vmx_vmwrite(HOST_RIP, (UINT64)AsmVmExit);
+	__vmx_vmwrite(HOST_RSP, (UINT64)&Cpu->Data.HostStack);
+
 	//
 	// Initialize guest.
 	//
-
 	__vmx_vmwrite(GUEST_ES_SELECTOR, AsmReadEs());
 	__vmx_vmwrite(GUEST_SS_SELECTOR, AsmReadSs());
 	__vmx_vmwrite(GUEST_DS_SELECTOR, AsmReadDs());
-	__vmx_vmwrite(GUEST_LDTR_SELECTOR, 0);
+	__vmx_vmwrite(GUEST_LDTR_SELECTOR, AsmReadLdtr());
 
 	__vmx_vmwrite(GUEST_TR_SELECTOR, AsmReadTr());
 	__vmx_vmwrite(GUEST_FS_SELECTOR, AsmReadFs());
@@ -141,6 +308,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_GS_LIMIT, AsmLoadSegmentLimit(AsmReadGs()));
 	__vmx_vmwrite(GUEST_TR_LIMIT, AsmLoadSegmentLimit(AsmReadTr()));
 
+	
 	__vmx_vmwrite(GUEST_ES_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadEs()));
 	__vmx_vmwrite(GUEST_CS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadCs()));
 	__vmx_vmwrite(GUEST_SS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadSs()));
@@ -148,7 +316,8 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_FS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadGs()));
 	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadTr()));
-	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, 0);
+	
+	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, (1 << 16)); // Invalid bit set
 
 	__vmx_vmwrite(GUEST_FS_BASE, (UINT64)Cpu);
 	__vmx_vmwrite(GUEST_GS_BASE, 0);
@@ -165,24 +334,38 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_GDTR_BASE, Descriptor.Base);
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
 
-	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
-	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
-
 	//
 	// Intel's propaganda to force everyone to use sysenter again.
 	//
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS, __readmsr(IA32_SYSENTER_CS));
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP, __readmsr(IA32_SYSENTER_EIP));
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP, __readmsr(IA32_SYSENTER_ESP));
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS,	__readmsr(IA32_SYSENTER_CS));
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP,	__readmsr(IA32_SYSENTER_EIP));
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP,	__readmsr(IA32_SYSENTER_ESP));
 
-	__vmx_vmwrite(GUEST_LINK_PTR_FULL, ~0ULL);
+	__vmx_vmwrite(GUEST_LINK_PTR_FULL, MAX_UINT64);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
 	__vmx_vmwrite(GUEST_CR3, __readcr3());
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());
-}	
+
+	__vmx_vmwrite(GUEST_IA32_EFER_FULL, __readmsr(IA32_EFER));
+
+	//
+	// Test
+	//
+	UINT8* GuestAddress = TranslateAddress(0x1000);
+	*GuestAddress = 0xF4; // HLT
+	__vmx_vmwrite(GUEST_RIP, 0x1000);
+	__vmx_vmwrite(GUEST_RSP, 0);
+
+	DebugPrint0402("[CATALYST] GUEST_RIP = 0x%x, GUEST_RSP = 0x%x\n", GuestAddress, 0);
+
+	UINT64 Error = __vmx_vmlaunch();
+	UINT64 ErrorExtended = 0;
+	__vmx_vmread(READONLY_VM_INSTRUCTION_ERROR, &ErrorExtended);
+	DebugPrint0402("[CATALYST] Error vmlaunch: %d, Extended = 0x%p\n", Error, ErrorExtended);
+}
 
 VOID
 EFIAPI

@@ -132,7 +132,7 @@ typedef union {
 		UINT64 Execute : 1;
 		UINT64 Reserved1 : 5;
 		UINT64 Accessed : 1;
-		UINT64 Ignored1 : 1;
+		UINT64 Present : 1;
 		UINT64 ExecuteUser : 1;
 		UINT64 Ignored2 : 1;
 		UINT64 PhysicalAddress : 36;
@@ -149,7 +149,7 @@ typedef union {
 		UINT64 Execute : 1;
 		UINT64 Reserved1 : 5;
 		UINT64 Accessed : 1;
-		UINT64 Ignored1 : 1;
+		UINT64 Present : 1;
 		UINT64 ExecuteUser : 1;
 		UINT64 Ignored2 : 1;
 		UINT64 PhysicalAddress : 36;
@@ -170,7 +170,7 @@ typedef union {
 		UINT64 Accessed : 1;
 		UINT64 Dirty : 1;
 		UINT64 ExecuteUser : 1;
-		UINT64 Ignored1 : 1;
+		UINT64 Present : 1;
 		UINT64 Reserved1 : 18;
 		UINT64 PhysicalAddress : 18;
 		UINT64 Reserved2 : 4;
@@ -188,7 +188,7 @@ typedef union {
 		UINT64 Reserved1 : 4;
 		UINT64 MustBeZero : 1;
 		UINT64 Accessed : 1;
-		UINT64 Ignored1 : 1;
+		UINT64 Present : 1;
 		UINT64 ExecuteUser : 1;
 		UINT64 Ignore21 : 1;
 		UINT64 PhysicalAddress : 36;
@@ -209,7 +209,7 @@ typedef union {
 		UINT64 Accessed : 1;
 		UINT64 Dirty : 1;
 		UINT64 ExecuteUser : 1;
-		UINT64 Ignored1 : 1;
+		UINT64 Present : 1;
 		UINT64 Reserved2 : 9;
 		UINT64 PhysicalAddress : 27;
 		UINT64 Reserved3 : 4;
@@ -226,7 +226,7 @@ typedef union {
 		UINT64 Execute : 1;
 		UINT64 EptMemoryType : 3;
 		UINT64 IgnorePAT : 1;
-		UINT64 Ignored1 : 1;
+		UINT64 Present : 1;
 		UINT64 Accessed : 1;
 		UINT64 Dirty : 1;
 		UINT64 ExecuteUser : 1;
@@ -344,6 +344,9 @@ typedef struct {
 
 
 #define IA32_SYSENTER_EIP 0x176
+
+
+#define IA32_EFER 0xC0000080
 
 
 #define IA32_APIC_BASE 0x1B
@@ -565,6 +568,9 @@ inline UINT64 AsmLoadSegmentLimit(UINT64 Selector) {
 }
 
 inline UINT64 AsmLoadSegmentAccessRights(UINT64 Selector) {
+	if (Selector == 0)
+		return 0x10000;
+
 	UINT64 Result;
 	UINT64 Zero = 0;
 	__asm__ __volatile__(
@@ -574,7 +580,7 @@ inline UINT64 AsmLoadSegmentAccessRights(UINT64 Selector) {
 		: "r" (Selector), "r" (Zero)
 		: "cc"
 	);
-	return Result;
+	return (Result >> 8) & 0xF0FF;
 }
 
 inline VOID __outb(UINT16 port, UINT8 value) {

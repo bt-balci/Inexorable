@@ -13,10 +13,58 @@ __attribute__((aligned(4096))) EPT_PML4			g_Epml4[512];
 __attribute__((aligned(4096))) EPT_PDPTE        g_Epdpt[64][512];
 __attribute__((aligned(4096))) EPT_LARGE_PDE    g_Epde[512][512];
 __attribute__((aligned(4096))) EPT_PTE			g_Epte[16384][512];
-UINT32                                          g_EpteCount;
-UINT32                                          g_EpdptCount = 0;
-UINT32                                          g_EpdeCount = 0;
-UINT32                                          g_EpteCount = 0;
+
+UINT32 g_EpdptCount    = 0;
+UINT32 g_EpdeCount     = 0;
+UINT32 g_EpteCount     = 0;
+
+
+/*
+    Maybe this shouuld return a BOOLEAN?
+*/
+VOID*
+EFIAPI
+TranslateAddress(
+    IN UINT64 GuestPhysicalAddress
+) {
+    UINT16 Pml4Idx = (GuestPhysicalAddress >> 39) & 0x1FF;
+    UINT16 PdptIdx = (GuestPhysicalAddress >> 30) & 0x1FF;
+    UINT16 PdIdx = (GuestPhysicalAddress >> 21) & 0x1FF;
+    UINT16 PtIdx = (GuestPhysicalAddress >> 12) & 0x1FF;
+
+    DebugPrint0402("[CATALYST] Translating GPA = 0x%p to HPA. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", 
+        GuestPhysicalAddress, Pml4Idx, PdptIdx, PdIdx, PtIdx);
+
+    EPT_PML4* Epml4 = &g_Epml4[Pml4Idx];
+    DebugPrint0402("[CATALYST] Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
+    if (!Epml4->Present)
+        return NULL;
+
+    EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
+    DebugPrint0402("[CATALYST] Pdpt = 0x%x at 0x%p\n", Pdpt->All, Pdpt);
+    if (!Pdpt->Present)
+        return NULL;
+
+    EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
+    DebugPrint0402("[CATALYST] Pd = 0x%x at 0x%p\n", Pd->All, Pd);
+    if (!Pd->Present)
+        return NULL;
+
+    /*
+    if (Pd->Large)
+        return (VOID*)(UINT64)(Pd->PhysicalAddress << 21);
+    */
+
+    EPT_PTE* Pt = &(((EPT_PTE*)(((EPT_PDE*)Pd)->PhysicalAddress << 12))[PtIdx]);
+    DebugPrint0402("[CATALYST] Pt = 0x%x at 0x%p\n", Pt->All, Pt);
+    if (!Pt->Present)
+        return NULL;
+
+    UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12);
+
+    DebugPrint0402("[CATALYST] GPA = 0x%p, translates to HPA = 0x%p\n", GuestPhysicalAddress, Result);;
+    return (VOID*)Result;
+}
 
 STATIC
 VOID
@@ -38,7 +86,7 @@ MapSinglePage(
     // PML4 Level
     //
     EPT_PML4* Epml4 = &g_Epml4[Pml4Idx];
-    if (Epml4->PhysicalAddress == 0) {
+    if (!Epml4->Present) {
         Epml4->Execute = TRUE;
         Epml4->Write = TRUE;
         Epml4->Read = TRUE;
@@ -51,6 +99,7 @@ MapSinglePage(
         UINT32 PdptPoolIndex = g_EpdptCount++;
 
         Epml4->PhysicalAddress = ((UINT64)&g_Epdpt[PdptPoolIndex][0]) >> 12;
+        Epml4->Present = TRUE;
 
         //DebugPrint0402("[CATALYST] EPT_PML4 = 0x%p at 0x%p\n", Epml4->All, Epml4);
     }
@@ -60,7 +109,7 @@ MapSinglePage(
     //
     EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
 
-    if (Pdpt->PhysicalAddress == 0) {
+    if (!Pdpt->Present) {
         Pdpt->Execute = TRUE;
         Pdpt->Write = TRUE;
         Pdpt->Read = TRUE;
@@ -73,9 +122,11 @@ MapSinglePage(
         UINT32 PdPoolIndex = g_EpdeCount++;
 
         Pdpt->PhysicalAddress = ((UINT64)&g_Epde[PdPoolIndex][0]) >> 12;
+        Pdpt->Present = TRUE;
         //DebugPrint0402("[CATALYST] EPT_PDPTE = 0x%p at %p\n", Pdpt->All, Pdpt);
     }
 
+    /*
     //
     // Default cast as a LARGE PDE (Used if Big == TRUE)
     //
@@ -83,6 +134,7 @@ MapSinglePage(
 
     //
     // PD Level (Large 2MB Pages)
+    // "GG's man it's over"
     //
     if (Big) {
         Pd->Execute = TRUE;
@@ -96,17 +148,19 @@ MapSinglePage(
         // Large PDE PhysicalAddress starts at bit 21, so shift right by 21.
         //
         Pd->PhysicalAddress = HostPhysical >> 21;
+        Pd->Present = TRUE;
 
         //DebugPrint0402("[CATALYST] EPT_LARGE_PDE = 0x%p at %p\n", Pd->All, Pd);
         return;
     }
+    */
 
     //
     // PT Level (Fall through for 4KB pages)
     //
-    EPT_PDE* NonLargePd = (EPT_PDE*)Pd;
+    EPT_PDE* NonLargePd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
 
-    if (NonLargePd->PhysicalAddress == 0) {
+    if (!NonLargePd->Present) {
         NonLargePd->Execute = TRUE;
         NonLargePd->Write = TRUE;
         NonLargePd->Read = TRUE;
@@ -123,6 +177,7 @@ MapSinglePage(
         UINT32 PtPoolIndex = g_EpteCount++;
 
         NonLargePd->PhysicalAddress = ((UINT64)&g_Epte[PtPoolIndex][0]) >> 12;
+        NonLargePd->Present = TRUE;
 
         //DebugPrint0402("[CATALYST] EPT_PDE = 0x%p at %p. EPTE count = %d\n", NonLargePd->All, NonLargePd, g_EpteCount);
     }
@@ -139,6 +194,7 @@ MapSinglePage(
     Pt->ExecuteUser = TRUE;
 
     Pt->PhysicalAddress = HostPhysical >> 12;
+    Pt->Present = TRUE;
 
     //DebugPrint0402("[CATALYST] EPT_PTE = 0x%p at %p\n", Pt->All, Pt);
 }
@@ -154,16 +210,16 @@ MapPagesLinear(
     UINT64 GuestPhysical = *CurrentGuestPhysical;
     UINT64 BytesRemaining = NumberOfPages * SIZE_4KB;
 
-    DebugPrint0402("[CATALYST] Mapping PhysicalStart = 0x%p and %d pages starting from 0x%p\n", PhysicalAddr, NumberOfPages, GuestPhysical);
+    //DebugPrint0402("[CATALYST] Mapping PhysicalStart = 0x%p and %d pages starting from 0x%p\n", PhysicalAddr, NumberOfPages, GuestPhysical);
 
     while (BytesRemaining > 0) {
         BOOLEAN IsAligned = ((PhysicalAddr & (SIZE_2MB - 1)) == 0) &&
             ((GuestPhysical & (SIZE_2MB - 1)) == 0);
         BOOLEAN IsLargeEnough = (BytesRemaining >= SIZE_2MB);
 
-        DebugPrint0402("[CATALYST] BytesRemaining = %d, IsAligned = %d, IsLargeEnough = %d\n", BytesRemaining, IsAligned, IsLargeEnough);
+        //DebugPrint0402("[CATALYST] BytesRemaining = %d, IsAligned = %d, IsLargeEnough = %d\n", BytesRemaining, IsAligned, IsLargeEnough);
 
-        if (IsAligned && IsLargeEnough) {
+        if (IsAligned && IsLargeEnough && 0) {
             //
             // Map 2MB page.
             //
