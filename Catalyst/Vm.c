@@ -300,15 +300,9 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_FS_BASE, 0);
 	__vmx_vmwrite(HOST_GS_BASE, (UINT64)Cpu);
 
-	IA32_DESCRIPTOR Descriptor = { 0 };
-	AsmReadGdtr(&Descriptor);
-
-	__vmx_vmwrite(HOST_TR_BASE, GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr())));
-	__vmx_vmwrite(HOST_GDTR_BASE, Descriptor.Base);
-
-	AsmReadIdtr(&Descriptor);
-
-	__vmx_vmwrite(HOST_IDTR_BASE, Descriptor.Base);
+	__vmx_vmwrite(HOST_TR_BASE, (UINT64)Cpu->DescriptorTables.TssBase);
+	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)Cpu->DescriptorTables.GdtBase);
+	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)Cpu->DescriptorTables.IdtBase);
 
 	__vmx_vmwrite(HOST_RIP, (UINT64)AsmVmExit);
 	__vmx_vmwrite(HOST_RSP, (UINT64)&Cpu->Data.HostStack);
@@ -347,6 +341,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_FS_BASE, (UINT64)Cpu);
 	__vmx_vmwrite(GUEST_GS_BASE, 0);
 
+	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadIdtr(&Descriptor);
 
 	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)Cpu->DescriptorTables.IdtBase);
@@ -458,48 +453,26 @@ PrepareProcessor(
 	_writegsbase_u64((unsigned long long)Cpu);
 
 	//
-	// Setup IDT.
+	// 1:1 map descriptor structures. Read the disclaimer at Main.c for the other screw up.
 	//
 	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadIdtr(&Descriptor);
 
-	DebugPrint0402("[CATALYST] IDT.Base = %p, IDT.Limit = %d\n", Descriptor.Base, Descriptor.Limit);
+	Cpu->DescriptorTables.IdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)Cpu->DescriptorTables.IdtBase, (UINT64)Cpu->DescriptorTables.IdtBase, FALSE);
 
-	//
-	// Copy the default IDT.
-	//
-	CopyMem(&Cpu->DescriptorTables.Idt, (VOID*)Descriptor.Base, Descriptor.Limit + 1);
+	AsmReadGdtr(&Descriptor);
+
+	Cpu->DescriptorTables.GdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)Cpu->DescriptorTables.GdtBase, (UINT64)Cpu->DescriptorTables.GdtBase, FALSE);
+
+	Cpu->DescriptorTables.TssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
+	MapSinglePage((UINT64)Cpu->DescriptorTables.TssBase, (UINT64)Cpu->DescriptorTables.TssBase, FALSE);
 
 	//
 	// Set the interrupt handler for sexy ACPI shenanigans.
 	//
-	Cpu->DescriptorTables.Idt[209] = GenerateIdtEntry((UINT64)0, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
-
-	//
-	// Load IDT.
-	//
-	MapSinglePage((UINT64)&Cpu->DescriptorTables.Idt, g_CurrentGuestPhysicalAddress, FALSE);
-	Cpu->DescriptorTables.IdtBase = (VOID*)g_CurrentGuestPhysicalAddress;
-	g_CurrentGuestPhysicalAddress += 0x1000;
-
-	//
-	// Load GDT.
-	//
-	Descriptor.Base = (UINTN)&Cpu->DescriptorTables.Gdt;
-	Descriptor.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Gdt) - 1);
-
-	MapSinglePage((UINT64)&Cpu->DescriptorTables.Gdt, g_CurrentGuestPhysicalAddress, FALSE);
-	Cpu->DescriptorTables.GdtBase = (VOID*)g_CurrentGuestPhysicalAddress;
-	g_CurrentGuestPhysicalAddress += 0x1000;
-
-	//
-	// Load TSS.
-	//
-	CopyMem(&Cpu->DescriptorTables.Tss, (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr())), 104);
-
-	MapSinglePage((UINT64)&Cpu->DescriptorTables.Tss, g_CurrentGuestPhysicalAddress, FALSE);
-	Cpu->DescriptorTables.TssBase = (VOID*)g_CurrentGuestPhysicalAddress;
-	g_CurrentGuestPhysicalAddress += 0x1000;
+	((X86_IDT_ENTRY*)Descriptor.Base)[209] = GenerateIdtEntry((UINT64)0, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
 
 	//
 	// Read VMX revision ID.
