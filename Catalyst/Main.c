@@ -147,7 +147,29 @@ MapMemory(
 	g_Eptp.MemoryType = 6;
 	g_Eptp.Pml4Address = ((UINT64)&g_Epml4) >> 12;
 
-	DebugPrint0402("[CATALYST] g_Eptp = 0x%p\n", g_Eptp);
+	DebugPrint0402("[CATALYST] g_Eptp = 0x%p\n", g_Eptp.All);
+
+	g_IdentityCr3.PhysicalAddress = ((UINT64)&g_IdentityPml4[0]) >> 12;
+
+	g_IdentityPml4[0].Present = TRUE;
+	g_IdentityPml4[0].Write = TRUE;
+	g_IdentityPml4[0].PhysicalAddress = ((UINT64)&g_IdentityPdpe[0]) >> 12;
+
+	for (UINTN i = 0; i < 512; i++) {
+		g_IdentityPdpe[i].Present = TRUE;
+		g_IdentityPdpe[i].Large = TRUE;
+		g_IdentityPdpe[i].Write = TRUE;
+		g_IdentityPdpe[i].PhysicalAddress = i;
+	}
+
+	DebugPrint0402("[CATALYST] g_IdentityCr3 = 0x%p\n",		g_IdentityCr3.All);
+	DebugPrint0402("[CATALYST] g_IdentityPml4[0] = 0x%p\n", g_IdentityPml4[0].All);
+	DebugPrint0402("[CATALYST] g_IdentityPdpe[0] = 0x%p\n", g_IdentityPdpe[0].All);
+	DebugPrint0402("[CATALYST] g_IdentityPdpe[1] = 0x%p\n", g_IdentityPdpe[1].All);
+	DebugPrint0402("[CATALYST] g_IdentityPdpe[2] = 0x%p\n", g_IdentityPdpe[2].All);
+	DebugPrint0402("[CATALYST] g_IdentityPdpe[3] = 0x%p\n", g_IdentityPdpe[3].All);
+
+	AsmWriteCr3(g_IdentityCr3.All);
 
 	DebugPrint0402("[CATALYST] Mapping out free memory...\n");
 

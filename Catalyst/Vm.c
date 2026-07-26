@@ -281,7 +281,10 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_TR_SELECTOR, AsmReadTr());
 
 	__vmx_vmwrite(HOST_CR0, __readcr0());
-	__vmx_vmwrite(HOST_CR3, __readcr3());
+	//
+	// Because for some reason, original identity page tables stay in EfiConventionalMemory.
+	//
+	__vmx_vmwrite(HOST_CR3, g_IdentityCr3.All);
 	__vmx_vmwrite(HOST_CR4, __readcr4());
 
 	__vmx_vmwrite(HOST_FS_BASE, 0);
@@ -356,7 +359,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, MAX_UINT64);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
-	__vmx_vmwrite(GUEST_CR3, __readcr3());
+	__vmx_vmwrite(GUEST_CR3, g_IdentityCr3.All);
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());

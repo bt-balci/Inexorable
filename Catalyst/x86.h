@@ -239,6 +239,58 @@ typedef union {
 } EPT_PTE;
 
 typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Present : 1;
+		UINT64 Write : 1;
+		UINT64 User : 1;
+		UINT64 WriteThrough : 1;
+		UINT64 CacheDisabled : 1;
+		UINT64 Accessed : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 Reserved1 : 1;
+		UINT64 Ignored2 : 4;
+		UINT64 PhysicalAddress : 40;
+		UINT64 Ignored3 : 11;
+		UINT64 NoExecute : 1;
+	};
+} PML4_1GB;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Present : 1;
+		UINT64 Write : 1;
+		UINT64 User : 1;
+		UINT64 WriteThrough : 1;
+		UINT64 CacheDisabled : 1;
+		UINT64 Accessed : 1;
+		UINT64 Dirty : 1;
+		UINT64 Large : 1;
+		UINT64 Global : 1;
+		UINT64 Ignored2 : 3;
+		UINT64 PAT : 1;
+		UINT64 Reserved : 17;
+		UINT64 PhysicalAddress : 22;
+		UINT64 Ignored3 : 7;
+		UINT64 PKE : 4;
+		UINT64 NoExecute : 1;
+	};
+} PDPE_1GB;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Reserved1 : 3;
+		UINT64 PWT : 1;
+		UINT64 PCD : 1;
+		UINT64 Reserved2 : 7;
+		UINT64 PhysicalAddress : 40;
+		UINT64 Reserved3 : 12;
+	};
+} CR3;
+
+typedef union {
 	UINT32 All;
 	struct {
 		UINT32 Vector : 8;
