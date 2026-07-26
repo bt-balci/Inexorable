@@ -27,14 +27,14 @@ UINT32 g_EpteCount     = 0;
 */
 VOID*
 EFIAPI
-TranslateAddress(
+TranslateGuestToHostAddress(
     IN UINT64 GuestPhysicalAddress
 ) {
-    UINT16 Pml4Idx = (GuestPhysicalAddress >> 39) & 0x1FF;
-    UINT16 PdptIdx = (GuestPhysicalAddress >> 30) & 0x1FF;
-    UINT16 PdIdx = (GuestPhysicalAddress >> 21) & 0x1FF;
-    UINT16 PtIdx = (GuestPhysicalAddress >> 12) & 0x1FF;
-    UINT16 Offset = (GuestPhysicalAddress) & 0xFFF;
+    UINT16 Pml4Idx  = (GuestPhysicalAddress >> 39) & 0x1FF;
+    UINT16 PdptIdx  = (GuestPhysicalAddress >> 30) & 0x1FF;
+    UINT16 PdIdx    = (GuestPhysicalAddress >> 21) & 0x1FF;
+    UINT16 PtIdx    = (GuestPhysicalAddress >> 12) & 0x1FF;
+    UINT16 Offset   = (GuestPhysicalAddress) & 0xFFF;
 
     DebugPrint0402("[CATALYST] Translating GPA = 0x%p to HPA. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", 
         GuestPhysicalAddress, Pml4Idx, PdptIdx, PdIdx, PtIdx);
@@ -70,17 +70,17 @@ TranslateAddress(
     return (VOID*)Result;
 }
 
-VOID
+BOOLEAN
 EFIAPI
 MapSinglePage(
     IN UINT64   GuestPhysical,
     IN UINT64   HostPhysical,
     IN BOOLEAN  Big
 ) {
-    UINT16 Pml4Idx = (GuestPhysical >> 39) & 0x1FF;
-    UINT16 PdptIdx = (GuestPhysical >> 30) & 0x1FF;
-    UINT16 PdIdx = (GuestPhysical >> 21) & 0x1FF;
-    UINT16 PtIdx = (GuestPhysical >> 12) & 0x1FF;
+    UINT16 Pml4Idx  = (GuestPhysical >> 39) & 0x1FF;
+    UINT16 PdptIdx  = (GuestPhysical >> 30) & 0x1FF;
+    UINT16 PdIdx    = (GuestPhysical >> 21) & 0x1FF;
+    UINT16 PtIdx    = (GuestPhysical >> 12) & 0x1FF;
 
     //DebugPrint0402("[CATALYST] Mapping GPA = %p to HPA = %p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n",
     //    GuestPhysical, HostPhysical, Big, Pml4Idx, PdptIdx, PdIdx, PtIdx);
@@ -97,7 +97,7 @@ MapSinglePage(
 
         if (g_EpdptCount >= 64) {
             DebugPrint0402("[CATALYST] g_EpdptCount is bigger than 64. Borked\n");
-            return;
+            return FALSE;
         }
         UINT32 PdptPoolIndex = g_EpdptCount++;
 
@@ -120,7 +120,7 @@ MapSinglePage(
 
         if (g_EpdeCount >= 512) {
             DebugPrint0402("[CATALYST] g_EpdeCount is bigger than 512. Borked\n");
-            return;
+            return FALSE;
         }
         UINT32 PdPoolIndex = g_EpdeCount++;
 
@@ -174,7 +174,7 @@ MapSinglePage(
         //
         if (g_EpteCount >= 16384) {
             DebugPrint0402("[CATALYST] g_EpteCount is bigger than 16384. Borked\n");
-            return;
+            return FALSE;
         }
 
         UINT32 PtPoolIndex = g_EpteCount++;
@@ -186,6 +186,9 @@ MapSinglePage(
     }
 
     EPT_PTE* Pt = &(((EPT_PTE*)(NonLargePd->PhysicalAddress << 12))[PtIdx]);
+    if (Pt->Present) {
+        return FALSE;
+    }
 
     //
     // Set the 4KB page entry
@@ -200,18 +203,19 @@ MapSinglePage(
     Pt->Present = TRUE;
 
     //DebugPrint0402("[CATALYST] EPT_PTE = 0x%p at %p\n", Pt->All, Pt);
+    return TRUE;
 }
 
-VOID
+BOOLEAN
 EFIAPI
 MapPagesLinear(
-    IN UINT64                       PhysicalStart,
-    IN UINT64                       NumberOfPages,
-    IN OUT UINT64*                  CurrentGuestPhysical
+    IN UINT64       PhysicalStart,
+    IN UINT64       NumberOfPages,
+    IN OUT UINT64*  CurrentGuestPhysical
 ) {
-    UINT64 PhysicalAddr = PhysicalStart;
-    UINT64 GuestPhysical = *CurrentGuestPhysical;
-    UINT64 BytesRemaining = NumberOfPages * SIZE_4KB;
+    UINT64 PhysicalAddr     = PhysicalStart;
+    UINT64 GuestPhysical    = *CurrentGuestPhysical;
+    UINT64 BytesRemaining   = NumberOfPages * SIZE_4KB;
 
     //DebugPrint0402("[CATALYST] Mapping PhysicalStart = 0x%p and %d pages starting from 0x%p\n", PhysicalAddr, NumberOfPages, GuestPhysical);
 
@@ -226,7 +230,9 @@ MapPagesLinear(
             //
             // Map 2MB page.
             //
-            MapSinglePage(GuestPhysical, PhysicalAddr, TRUE);
+            if (!MapSinglePage(GuestPhysical, PhysicalAddr, TRUE)) {
+                return FALSE;
+            }
             PhysicalAddr += SIZE_2MB;
             GuestPhysical += SIZE_2MB;
             BytesRemaining -= SIZE_2MB;
@@ -235,7 +241,9 @@ MapPagesLinear(
             //
             // Map 4KB page.
             //
-            MapSinglePage(GuestPhysical, PhysicalAddr, FALSE);
+            if (!MapSinglePage(GuestPhysical, PhysicalAddr, FALSE)) {
+                return FALSE;
+            }
             PhysicalAddr += SIZE_4KB;
             GuestPhysical += SIZE_4KB;
             BytesRemaining -= SIZE_4KB;
@@ -243,6 +251,8 @@ MapPagesLinear(
     }
 
     *CurrentGuestPhysical = GuestPhysical;
+
+    return TRUE;
 }
 
 #endif

@@ -24,7 +24,7 @@ __attribute__((aligned(4096))) extern EPT_PTE		    g_Epte[16384][512];
 ///////////////////////////////////////////////
 
 
-VOID
+BOOLEAN
 EFIAPI
 MapSinglePage(
     IN UINT64   GuestPhysical,
@@ -32,17 +32,17 @@ MapSinglePage(
     IN BOOLEAN  Big
 );
 
-VOID
+BOOLEAN
 EFIAPI
 MapPagesLinear(
-    IN UINT64                       PhysicalStart,
-    IN UINT64                       NumberOfPages,
-    IN OUT UINT64*                  CurrentGuestPhysical
+    IN UINT64       PhysicalStart,
+    IN UINT64       NumberOfPages,
+    IN OUT UINT64*  CurrentGuestPhysical
 );
 
 VOID*
 EFIAPI
-TranslateAddress(
+TranslateGuestToHostAddress(
     IN UINT64 GuestPhysicalAddress
 );
 

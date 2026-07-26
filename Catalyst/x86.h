@@ -314,6 +314,21 @@ typedef union {
 	};
 } VMX_PAGE_FAULT_ERROR_CODE;
 
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 Read : 1;
+		UINT32 Write : 1;
+		UINT32 Execute : 1;
+		UINT32 IsReadable : 1;
+		UINT32 IsWritable : 1;
+		UINT32 IsExecutable : 1;
+		UINT32 UserExecute : 1;
+		UINT32 GuestLinearAddressValid : 1;
+		UINT32 TranslationBork : 1;
+	};
+} VMX_EPT_VIOLATION_QUAILIFICATION;
+
 /*
 	All x86 general purpose registers + Xmm0-5 because they are volatile in Microsoft x64 Calling Convention
 */

@@ -25,7 +25,7 @@ CONST UINT8 g_InexorableEfi[] = {
  #embed "../x64/Debug/inexorable.efi"
 };
 CONST UINTN g_InexorableEfiSize = sizeof(g_InexorableEfi);
-UINT64 g_CurrentVirtualAddress;
+UINT64 g_CurrentGuestPhysicalAddress;
 
 CATALYST_VIRTUAL_CPU VirtualProcessors[CONFIG_CPU_COUNT] = {0};
 
@@ -155,6 +155,11 @@ MapMemory(
 	g_IdentityPml4[0].Write = TRUE;
 	g_IdentityPml4[0].PhysicalAddress = ((UINT64)&g_IdentityPdpe[0]) >> 12;
 
+	//
+	// Why not map the first 4GB only?
+	// Because of the memory holes, there is actually more RAM than there is (approximately 5GB for a 4GB machine)
+	// And we start at 4.5GB~. So we need to map all first 512GBs to make sure we won't bork ourselves.
+	//
 	for (UINTN i = 0; i < 512; i++) {
 		g_IdentityPdpe[i].Present = TRUE;
 		g_IdentityPdpe[i].Large = TRUE;
@@ -168,8 +173,6 @@ MapMemory(
 	DebugPrint0402("[CATALYST] g_IdentityPdpe[1] = 0x%p\n", g_IdentityPdpe[1].All);
 	DebugPrint0402("[CATALYST] g_IdentityPdpe[2] = 0x%p\n", g_IdentityPdpe[2].All);
 	DebugPrint0402("[CATALYST] g_IdentityPdpe[3] = 0x%p\n", g_IdentityPdpe[3].All);
-
-	AsmWriteCr3(g_IdentityCr3.All);
 
 	DebugPrint0402("[CATALYST] Mapping out free memory...\n");
 
@@ -189,15 +192,37 @@ MapMemory(
 			UINT64 PhysicalStart = Desc->PhysicalStart;
 			UINT64 NumberOfPages = Desc->NumberOfPages;
 			
-			DebugPrint0402("[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, g_CurrentVirtualAddress);
+			DebugPrint0402("[CATALYST] Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, g_CurrentGuestPhysicalAddress);
 			
-			MapPagesLinear(PhysicalStart, NumberOfPages, &g_CurrentVirtualAddress);
+			if (!MapPagesLinear(PhysicalStart, NumberOfPages, &g_CurrentGuestPhysicalAddress)) {
+				DebugPrint0402("[CATALYST] Failed to map %d pages HPA 0x%p to GPA 0x%p\n", NumberOfPages, PhysicalStart, g_CurrentGuestPhysicalAddress);
+			}
 
-			DebugPrint0402("[CATALYST] Mapped %d pages, new cursor: %p\n", NumberOfPages, g_CurrentVirtualAddress);
+			DebugPrint0402("[CATALYST] Mapped %d pages, new cursor: %p\n", NumberOfPages, g_CurrentGuestPhysicalAddress);
 		}
 
 		Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Desc + DescriptorSize);
 	}
+
+	//
+	// Forcefully map the host physical memory holding our Guest Page Tables
+	// into the EPT. We will identity map them (GPA == HPA) so we can safely
+	// pass their HPA directly to GUEST_CR3. (200 IQ, for now. Considering that we are above the 4GB but I can't be bothered.)
+	//
+	UINT64 Pml4Hpa = (UINT64)&g_IdentityPml4[0];
+	MapSinglePage(Pml4Hpa, Pml4Hpa, FALSE);
+
+	UINT64 PdpeHpa = (UINT64)&g_IdentityPdpe[0];
+	//
+	// Map enough pages to cover the 512 PDPE entries (usually just 1 page, but doing a few ensures we don't cut it off).
+	//
+	for (UINTN i = 0; i < 4; i++) {
+		if (!MapSinglePage(PdpeHpa + (i * 0x1000), PdpeHpa + (i * 0x1000), FALSE)) {
+			DebugPrint0402("[CATALYST] Failed to map Guest CR3 structures!\n");
+		}
+	}
+
+	DebugPrint0402("[CATALYST] Explicitly mapped Guest CR3 structures into EPT\n");
 
 End:
 	gBS->FreePool(DescriptorArray);

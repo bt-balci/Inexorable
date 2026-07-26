@@ -184,8 +184,18 @@ VmExitHandler(
 				PageFaultErrorCode.Present, PageFaultErrorCode.Write, PageFaultErrorCode.User,
 				PageFaultErrorCode.ReservedBitSet, PageFaultErrorCode.NxViolation, PageFaultErrorCode.ProtectionKeyViolation);
 
+			DumpVmcs();
 			__asm__ __volatile__("hlt");
 		}
+	}
+	else if (ExitReason == VMEXIT_REASON_EPT_VIOLATION) {
+		VMX_EPT_VIOLATION_QUAILIFICATION EptQualification = { .All = (UINT32)ExitQualification };
+		DebugPrint0402("[CATALYST] EPT Violation. Read = %d, Write = %d, Execute = %d, IsReadable = %d, IsWritable = %d, IsExecutable = %d, UserExecute = %d, GuestLinearAddressValid = %d, TranslationBork = %d\n",
+			EptQualification.Read, EptQualification.Write, EptQualification.Execute, EptQualification.IsReadable, EptQualification.IsWritable, EptQualification.IsExecutable,
+			EptQualification.UserExecute, EptQualification.GuestLinearAddressValid, EptQualification.TranslationBork);
+
+		DumpVmcs();
+		__asm__ __volatile__("hlt");
 	}
 }
 
@@ -367,7 +377,7 @@ SetupVmcs(
 	//
 	// Test
 	//
-	UINT8* GuestAddress = TranslateAddress(0x1000);
+	UINT8* GuestAddress = TranslateGuestToHostAddress(0x1000);
 	GuestAddress[0] = 0xF4; // HLT
 	__vmx_vmwrite(GUEST_RIP, 0x1000);
 	__vmx_vmwrite(GUEST_RSP, 0x2000);
@@ -468,9 +478,9 @@ PrepareProcessor(
 	//
 	// Load IDT.
 	//
-	MapSinglePage((UINT64)&Cpu->DescriptorTables.Idt, g_CurrentVirtualAddress, FALSE);
-	Cpu->DescriptorTables.IdtBase = (VOID*)g_CurrentVirtualAddress;
-	g_CurrentVirtualAddress += 0x1000;
+	MapSinglePage((UINT64)&Cpu->DescriptorTables.Idt, g_CurrentGuestPhysicalAddress, FALSE);
+	Cpu->DescriptorTables.IdtBase = (VOID*)g_CurrentGuestPhysicalAddress;
+	g_CurrentGuestPhysicalAddress += 0x1000;
 
 	//
 	// Load GDT.
@@ -478,18 +488,18 @@ PrepareProcessor(
 	Descriptor.Base = (UINTN)&Cpu->DescriptorTables.Gdt;
 	Descriptor.Limit = (UINT16)(sizeof(Cpu->DescriptorTables.Gdt) - 1);
 
-	MapSinglePage((UINT64)&Cpu->DescriptorTables.Gdt, g_CurrentVirtualAddress, FALSE);
-	Cpu->DescriptorTables.GdtBase = (VOID*)g_CurrentVirtualAddress;
-	g_CurrentVirtualAddress += 0x1000;
+	MapSinglePage((UINT64)&Cpu->DescriptorTables.Gdt, g_CurrentGuestPhysicalAddress, FALSE);
+	Cpu->DescriptorTables.GdtBase = (VOID*)g_CurrentGuestPhysicalAddress;
+	g_CurrentGuestPhysicalAddress += 0x1000;
 
 	//
 	// Load TSS.
 	//
 	CopyMem(&Cpu->DescriptorTables.Tss, (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr())), 104);
 
-	MapSinglePage((UINT64)&Cpu->DescriptorTables.Tss, g_CurrentVirtualAddress, FALSE);
-	Cpu->DescriptorTables.TssBase = (VOID*)g_CurrentVirtualAddress;
-	g_CurrentVirtualAddress += 0x1000;
+	MapSinglePage((UINT64)&Cpu->DescriptorTables.Tss, g_CurrentGuestPhysicalAddress, FALSE);
+	Cpu->DescriptorTables.TssBase = (VOID*)g_CurrentGuestPhysicalAddress;
+	g_CurrentGuestPhysicalAddress += 0x1000;
 
 	//
 	// Read VMX revision ID.
