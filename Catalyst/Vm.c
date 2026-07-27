@@ -22,9 +22,9 @@ DumpVmcs(
 	do { \
 		UINT64 _val = 0; \
 		if (__vmx_vmread(Field, &_val) == 0) \
-			DebugPrint0402("[CATALYST] %a = 0x%p\n", Name, _val); \
+			DebugPrint0402("%a = 0x%p\n", Name, _val); \
 		else \
-			DebugPrint0402("[CATALYST] %a = [READ ERROR]\n", Name); \
+			DebugPrint0402("%a = [READ ERROR]\n", Name); \
 	} while (0)
 
 
@@ -157,46 +157,50 @@ VmExitHandler(
 	//
 	ExitReason &= 0xFFFF;
 
-	DebugPrint0402("[CATALYST] VMEXIT: Reason = %d, Qualification = %d, ExitInstructionLen = %d, GuestRip = %x, GuestRsp = %x\n",
+	DebugPrint0402("VMEXIT: Reason = %d, Qualification = %d, ExitInstructionLen = %d, GuestRip = %x, GuestRsp = %x\n",
 		ExitReason, ExitQualification, ExitInstructionLen, Cpu->Context.Rip, Cpu->Context.Rsp);
 
 	if (ExitReason == VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE) {
-		DebugPrint0402("[CATALYST] VMCS is borked\n");
-		DumpVmcs();
-		//DumpEpts();
+		DebugPrint0402("VMCS is borked\n");
+		goto Bork;
 	}
 	else if (ExitReason == VMEXIT_REASON_TRIPLE_FAULT) {
-		DebugPrint0402("[CATALYST] Guest triple-faulted\n");
-		DumpVmcs();
-		//DumpEpts();
+		DebugPrint0402("Guest triple-faulted\n");
+		goto Bork;
 	}
 	else if (ExitReason == VMEXIT_REASON_EXCEPTION_OR_NMI) {
 		VMX_INTERRUPTION_INFORMATION InterruptionInfo = { 0 };
 		__vmx_vmread(READONLY_VMEXIT_INTERRUPTION_INFO, (UINT64*)&InterruptionInfo.All);
-		DebugPrint0402("[CATALYST] Guest exception occured. Vector = %d, Type = %d, Deliver = %d, Valid = %d\n",
+		DebugPrint0402("Guest exception occured. Vector = %d, Type = %d, Deliver = %d, Valid = %d\n",
 			InterruptionInfo.Vector, InterruptionInfo.Type, InterruptionInfo.DeliverErrorCode, InterruptionInfo.Valid);
 
 		if (InterruptionInfo.Vector == 14) {
 			VMX_PAGE_FAULT_ERROR_CODE PageFaultErrorCode = { 0 };
 			__vmx_vmread(PAGE_FAULT_ERR_CODE_MASK, (UINT64*)&PageFaultErrorCode.All);
 
-			DebugPrint0402("[CATALYST] Page Fault occured. Present = %d, Write = %d, User = %d, ReservedBitSet = %d, NxViolation = %d, ProtectionKeyInvalid = %d\n",
+			DebugPrint0402("Page Fault occured. Present = %d, Write = %d, User = %d, ReservedBitSet = %d, NxViolation = %d, ProtectionKeyInvalid = %d\n",
 				PageFaultErrorCode.Present, PageFaultErrorCode.Write, PageFaultErrorCode.User,
 				PageFaultErrorCode.ReservedBitSet, PageFaultErrorCode.NxViolation, PageFaultErrorCode.ProtectionKeyViolation);
 
-			DumpVmcs();
-			__asm__ __volatile__("hlt");
+			goto Bork;
 		}
 	}
 	else if (ExitReason == VMEXIT_REASON_EPT_VIOLATION) {
 		VMX_EPT_VIOLATION_QUAILIFICATION EptQualification = { .All = (UINT32)ExitQualification };
-		DebugPrint0402("[CATALYST] EPT Violation. Read = %d, Write = %d, Execute = %d, IsReadable = %d, IsWritable = %d, IsExecutable = %d, UserExecute = %d, GuestLinearAddressValid = %d, TranslationBork = %d\n",
+		DebugPrint0402("EPT Violation. Read = %d, Write = %d, Execute = %d, IsReadable = %d, IsWritable = %d, IsExecutable = %d, UserExecute = %d, GuestLinearAddressValid = %d, TranslationBork = %d\n",
 			EptQualification.Read, EptQualification.Write, EptQualification.Execute, EptQualification.IsReadable, EptQualification.IsWritable, EptQualification.IsExecutable,
 			EptQualification.UserExecute, EptQualification.GuestLinearAddressValid, EptQualification.TranslationBork);
 
-		DumpVmcs();
-		__asm__ __volatile__("hlt");
+		goto Bork;
 	}
+
+	goto End;
+
+Bork:
+	DumpVmcs();
+	__asm__ __volatile__("hlt");
+End:
+	return;
 }
 
 STATIC
@@ -261,7 +265,7 @@ SetupVmcs(
 ) {
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)_readgsbase_u64();
 
-	DebugPrint0402("[CATALYST] Virtualizing processor %d...\n", Cpu->Index);
+	DebugPrint0402("Virtualizing processor %d...\n", Cpu->Index);
 
 	//
 	// Initialize controls.
@@ -277,7 +281,6 @@ SetupVmcs(
 
 	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
-	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT32);
 
 	//
 	// Initialize host.
@@ -377,12 +380,12 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_RIP, 0x1000);
 	__vmx_vmwrite(GUEST_RSP, 0x2000);
 
-	DebugPrint0402("[CATALYST] GUEST_RIP = 0x%x, GUEST_RSP = 0x%x\n", GuestAddress, 0x2000);
+	DebugPrint0402("GUEST_RIP = 0x%x, GUEST_RSP = 0x%x\n", GuestAddress, 0x2000);
 
 	UINT64 Error = __vmx_vmlaunch();
 	UINT64 ErrorExtended = 0;
 	__vmx_vmread(READONLY_VM_INSTRUCTION_ERROR, &ErrorExtended);
-	DebugPrint0402("[CATALYST] Error vmlaunch: %d, Extended = 0x%p\n", Error, ErrorExtended);
+	DebugPrint0402("Error vmlaunch: %d, Extended = 0x%p\n", Error, ErrorExtended);
 }
 
 VOID
@@ -392,15 +395,15 @@ PrepareProcessor(
 ) {
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)Argument;
 
-	DebugPrint0402("[CATALYST] Preparing processor %d...\n", Cpu->Index);
+	DebugPrint0402("Preparing processor %d...\n", Cpu->Index);
 
-	DebugPrint0402("[CATALYST] Preparing CR registers...\n");
+	DebugPrint0402("Preparing CR registers...\n");
 
 	//
 	// Read CR0 and CR4.
 	//
 	UINT64 Cr0 = __readcr0();
-	DebugPrint0402("[CATALYST] CR0 = %p\n", Cr0);
+	DebugPrint0402("CR0 = %p\n", Cr0);
 
 	UINT64 Cr4 = __readcr4();
 
@@ -409,7 +412,7 @@ PrepareProcessor(
 	//
 	Cr4 |= (1 << 16);
 
-	DebugPrint0402("[CATALYST] CR4 = %p\n", Cr4);
+	DebugPrint0402("CR4 = %p\n", Cr4);
 
 	//
 	// Read required bitmask values for Cr0 and Cr4.
@@ -417,20 +420,20 @@ PrepareProcessor(
 	UINT64 Cr0OrMask	= __readmsr(IA32_VMX_CR0_FIXED0);
 	UINT64 Cr0AndMask	= __readmsr(IA32_VMX_CR0_FIXED1);
 
-	DebugPrint0402("[CATALYST] CR0_FIXED0 = %p\n", Cr0OrMask);
-	DebugPrint0402("[CATALYST] CR0_FIXED1 = %p\n", Cr0AndMask);
+	DebugPrint0402("CR0_FIXED0 = %p\n", Cr0OrMask);
+	DebugPrint0402("CR0_FIXED1 = %p\n", Cr0AndMask);
 
 	UINT64 Cr4OrMask	= __readmsr(IA32_VMX_CR4_FIXED0);
 	UINT64 Cr4AndMask	= __readmsr(IA32_VMX_CR4_FIXED1);
 
-	DebugPrint0402("[CATALYST] CR4_FIXED0 = %p\n", Cr4OrMask);
-	DebugPrint0402("[CATALYST] CR4_FIXED1 = %p\n", Cr4AndMask);
+	DebugPrint0402("CR4_FIXED0 = %p\n", Cr4OrMask);
+	DebugPrint0402("CR4_FIXED1 = %p\n", Cr4AndMask);
 
 	Cr0 = (Cr0 & Cr0AndMask) | Cr0OrMask;
 	Cr4 = (Cr4 & Cr4AndMask) | Cr4OrMask;
 
-	DebugPrint0402("[CATALYST] CR0_FINAL = %p\n", Cr0);
-	DebugPrint0402("[CATALYST] CR4_FINAL = %p\n", Cr4);
+	DebugPrint0402("CR0_FINAL = %p\n", Cr0);
+	DebugPrint0402("CR4_FINAL = %p\n", Cr4);
 
 	//
 	// Write values back.
@@ -454,6 +457,7 @@ PrepareProcessor(
 
 	//
 	// 1:1 map descriptor structures. Read the disclaimer at Main.c for the other screw up.
+	// Warning: This will INEVITABLY BREAK if the Catalyst is not mapped over the 4GB limit and guest has more than 4GB memory. 
 	//
 	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadIdtr(&Descriptor);
@@ -479,7 +483,7 @@ PrepareProcessor(
 	//
 	UINT32 Revision = __readmsr(IA32_VMX_BASIC);
 
-	DebugPrint0402("[CATALYST] VMX Revision (IA32_VMX_BASIC) = %d\n", Revision);
+	DebugPrint0402("VMX Revision (IA32_VMX_BASIC) = %d\n", Revision);
 
 	//
 	// Set revision field of each VMX structure.
@@ -487,8 +491,8 @@ PrepareProcessor(
 	Cpu->Vmx.Vmcs.RevisionIdentifier	= Revision;
 	Cpu->Vmx.VmxOn.RevisionIdentifier	= Revision;
 
-	DebugPrint0402("[CATALYST] VMXON = %p\n", &Cpu->Vmx.VmxOn);
-	DebugPrint0402("[CATALYST] VMCS = %p\n", &Cpu->Vmx.Vmcs);
+	DebugPrint0402("VMXON = %p\n", &Cpu->Vmx.VmxOn);
+	DebugPrint0402("VMCS = %p\n", &Cpu->Vmx.Vmcs);
 
 	//
 	// Set VMXON region.
@@ -496,23 +500,23 @@ PrepareProcessor(
 	//
 	UINT8 Error = __vmx_on((UINT64)&Cpu->Vmx.VmxOn);
 	if (Error != 0) {
-		DebugPrint0402("[CATALYST] Failed to vmxon: %d\n", Error);
+		DebugPrint0402("Failed to vmxon: %d\n", Error);
 		return;
 	}
 
 	Error = __vmx_vmclear((UINT64)&Cpu->Vmx.Vmcs);
 	if (Error != 0) {
-		DebugPrint0402("[CATALYST] Failed to vmclear: %d\n", Error);
+		DebugPrint0402("Failed to vmclear: %d\n", Error);
 		return;
 	}
 
 	Error = __vmx_vmptrld((UINT64)&Cpu->Vmx.Vmcs);
 	if (Error != 0) {
-		DebugPrint0402("[CATALYST] Failed to vmptrld: %d\n", Error);
+		DebugPrint0402("Failed to vmptrld: %d\n", Error);
 		return;
 	}
 
-	DebugPrint0402("[CATALYST] Processor %d prepared\n", Cpu->Index);
+	DebugPrint0402("Processor %d prepared\n", Cpu->Index);
 
 	//
 	// Fill VMCS and virtualize processor.

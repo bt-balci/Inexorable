@@ -36,21 +36,21 @@ TranslateGuestToHostAddress(
     UINT16 PtIdx    = (GuestPhysicalAddress >> 12) & 0x1FF;
     UINT16 Offset   = (GuestPhysicalAddress) & 0xFFF;
 
-    DebugPrint0402("[CATALYST] Translating GPA = 0x%p to HPA. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", 
+    DebugPrint0402("Translating GPA = 0x%p to HPA. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", 
         GuestPhysicalAddress, Pml4Idx, PdptIdx, PdIdx, PtIdx);
 
     EPT_PML4* Epml4 = &g_Epml4[Pml4Idx];
-    DebugPrint0402("[CATALYST] Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
+    DebugPrint0402("Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
     if (!Epml4->Present)
         return NULL;
 
     EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
-    DebugPrint0402("[CATALYST] Pdpt = 0x%x at 0x%p\n", Pdpt->All, Pdpt);
+    DebugPrint0402("Pdpt = 0x%x at 0x%p\n", Pdpt->All, Pdpt);
     if (!Pdpt->Present)
         return NULL;
 
     EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
-    DebugPrint0402("[CATALYST] Pd = 0x%x at 0x%p\n", Pd->All, Pd);
+    DebugPrint0402("Pd = 0x%x at 0x%p\n", Pd->All, Pd);
     if (!Pd->Present)
         return NULL;
 
@@ -60,13 +60,13 @@ TranslateGuestToHostAddress(
     */
 
     EPT_PTE* Pt = &(((EPT_PTE*)(((EPT_PDE*)Pd)->PhysicalAddress << 12))[PtIdx]);
-    DebugPrint0402("[CATALYST] Pt = 0x%x at 0x%p\n", Pt->All, Pt);
+    DebugPrint0402("Pt = 0x%x at 0x%p\n", Pt->All, Pt);
     if (!Pt->Present)
         return NULL;
 
     UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12) + Offset;
 
-    DebugPrint0402("[CATALYST] GPA = 0x%p, translates to HPA = 0x%p\n", GuestPhysicalAddress, Result);
+    DebugPrint0402("GPA = 0x%p, translates to HPA = 0x%p\n", GuestPhysicalAddress, Result);
     return (VOID*)Result;
 }
 
@@ -82,7 +82,7 @@ MapSinglePage(
     UINT16 PdIdx    = (GuestPhysical >> 21) & 0x1FF;
     UINT16 PtIdx    = (GuestPhysical >> 12) & 0x1FF;
 
-    //DebugPrint0402("[CATALYST] Mapping GPA = %p to HPA = %p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n",
+    //DebugPrint0402("Mapping GPA = %p to HPA = %p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n",
     //    GuestPhysical, HostPhysical, Big, Pml4Idx, PdptIdx, PdIdx, PtIdx);
 
     //
@@ -96,7 +96,7 @@ MapSinglePage(
         Epml4->ExecuteUser = TRUE;
 
         if (g_EpdptCount >= 64) {
-            DebugPrint0402("[CATALYST] g_EpdptCount is bigger than 64. Borked\n");
+            DebugPrint0402("g_EpdptCount is bigger than 64. Borked\n");
             return FALSE;
         }
         UINT32 PdptPoolIndex = g_EpdptCount++;
@@ -104,7 +104,7 @@ MapSinglePage(
         Epml4->PhysicalAddress = ((UINT64)&g_Epdpt[PdptPoolIndex][0]) >> 12;
         Epml4->Present = TRUE;
 
-        //DebugPrint0402("[CATALYST] EPT_PML4 = 0x%p at 0x%p\n", Epml4->All, Epml4);
+        //DebugPrint0402("EPT_PML4 = 0x%p at 0x%p\n", Epml4->All, Epml4);
     }
 
     //
@@ -119,14 +119,14 @@ MapSinglePage(
         Pdpt->ExecuteUser = TRUE;
 
         if (g_EpdeCount >= 512) {
-            DebugPrint0402("[CATALYST] g_EpdeCount is bigger than 512. Borked\n");
+            DebugPrint0402("g_EpdeCount is bigger than 512. Borked\n");
             return FALSE;
         }
         UINT32 PdPoolIndex = g_EpdeCount++;
 
         Pdpt->PhysicalAddress = ((UINT64)&g_Epde[PdPoolIndex][0]) >> 12;
         Pdpt->Present = TRUE;
-        //DebugPrint0402("[CATALYST] EPT_PDPTE = 0x%p at %p\n", Pdpt->All, Pdpt);
+        //DebugPrint0402("EPT_PDPTE = 0x%p at %p\n", Pdpt->All, Pdpt);
     }
 
     /*
@@ -153,7 +153,7 @@ MapSinglePage(
         Pd->PhysicalAddress = HostPhysical >> 21;
         Pd->Present = TRUE;
 
-        //DebugPrint0402("[CATALYST] EPT_LARGE_PDE = 0x%p at %p\n", Pd->All, Pd);
+        //DebugPrint0402("EPT_LARGE_PDE = 0x%p at %p\n", Pd->All, Pd);
         return;
     }
     */
@@ -173,7 +173,7 @@ MapSinglePage(
         // Hmm. Can we get borked? Better log than hang.
         //
         if (g_EpteCount >= 16384) {
-            DebugPrint0402("[CATALYST] g_EpteCount is bigger than 16384. Borked\n");
+            DebugPrint0402("g_EpteCount is bigger than 16384. Borked\n");
             return FALSE;
         }
 
@@ -182,7 +182,7 @@ MapSinglePage(
         NonLargePd->PhysicalAddress = ((UINT64)&g_Epte[PtPoolIndex][0]) >> 12;
         NonLargePd->Present = TRUE;
 
-        //DebugPrint0402("[CATALYST] EPT_PDE = 0x%p at %p. EPTE count = %d\n", NonLargePd->All, NonLargePd, g_EpteCount);
+        //DebugPrint0402("EPT_PDE = 0x%p at %p. EPTE count = %d\n", NonLargePd->All, NonLargePd, g_EpteCount);
     }
 
     EPT_PTE* Pt = &(((EPT_PTE*)(NonLargePd->PhysicalAddress << 12))[PtIdx]);
@@ -202,7 +202,7 @@ MapSinglePage(
     Pt->PhysicalAddress = HostPhysical >> 12;
     Pt->Present = TRUE;
 
-    //DebugPrint0402("[CATALYST] EPT_PTE = 0x%p at %p\n", Pt->All, Pt);
+    //DebugPrint0402("EPT_PTE = 0x%p at %p\n", Pt->All, Pt);
     return TRUE;
 }
 
@@ -217,14 +217,14 @@ MapPagesLinear(
     UINT64 GuestPhysical    = *CurrentGuestPhysical;
     UINT64 BytesRemaining   = NumberOfPages * SIZE_4KB;
 
-    //DebugPrint0402("[CATALYST] Mapping PhysicalStart = 0x%p and %d pages starting from 0x%p\n", PhysicalAddr, NumberOfPages, GuestPhysical);
+    //DebugPrint0402("Mapping PhysicalStart = 0x%p and %d pages starting from 0x%p\n", PhysicalAddr, NumberOfPages, GuestPhysical);
 
     while (BytesRemaining > 0) {
         BOOLEAN IsAligned = ((PhysicalAddr & (SIZE_2MB - 1)) == 0) &&
             ((GuestPhysical & (SIZE_2MB - 1)) == 0);
         BOOLEAN IsLargeEnough = (BytesRemaining >= SIZE_2MB);
 
-        //DebugPrint0402("[CATALYST] BytesRemaining = %d, IsAligned = %d, IsLargeEnough = %d\n", BytesRemaining, IsAligned, IsLargeEnough);
+        //DebugPrint0402("BytesRemaining = %d, IsAligned = %d, IsLargeEnough = %d\n", BytesRemaining, IsAligned, IsLargeEnough);
 
         if (IsAligned && IsLargeEnough && 0) {
             //
