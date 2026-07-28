@@ -1,6 +1,3 @@
-#ifndef _X86_C_
-#define _X86_C_
-
 #include <Uefi.h>
 #include <Base.h>
 #include <Library/DebugLib.h>
@@ -36,12 +33,13 @@ CreateGdtEntry(
 
 	//
 	// Access byte.
+	// At this point I'm just pulling random constants from internet.
 	//
 	Entry.Access.Accessed = 0;
-	Entry.Access.WriteAllowed = WriteAllowed;	// Readable for Code, Writable for Data
-	Entry.Access.Direction = 0;					// Grows up
+	Entry.Access.WriteAllowed = WriteAllowed;
+	Entry.Access.Direction = 0;
 	Entry.Access.Executable = Executable;
-	Entry.Access.DescriptorType = 1;			// 1 for Code/Data segments
+	Entry.Access.DescriptorType = 1;
 	Entry.Access.Dpl = Dpl & 0x03;
 	Entry.Access.Present = 1;
 
@@ -163,5 +161,3 @@ IsVmxEnabled(
 
 	return TRUE;
 }
-
-#endif

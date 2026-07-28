@@ -1,6 +1,3 @@
-#ifndef _VM_C_
-#define _VM_C_
-
 #include <Uefi.h>
 #include <Base.h>
 #include <Library/BaseLib.h>
@@ -11,6 +8,16 @@
 #include "Vm.h"
 #include "Efi.h"
 #include "Memory.h"
+
+__attribute__((aligned(4096))) X86_GDT_ENTRY	g_GuestHostGdt[8192];
+
+VOID* g_GuestHostIdtBase;
+VOID* g_GuestHostGdtBase;
+VOID* g_GuestHostTssBase;
+
+UINT16 g_GuestHostTrSelector;
+UINT16 g_GuestHostTrAccessRights;
+UINT16 g_GuestHostTrLimit;
 
 STATIC
 VOID
@@ -157,7 +164,7 @@ VmExitHandler(
 	//
 	ExitReason &= 0xFFFF;
 
-	DebugPrint0402("VMEXIT: Reason = %d, Qualification = %d, ExitInstructionLen = %d, GuestRip = %x, GuestRsp = %x\n",
+	DebugPrint0402("VMEXIT: Reason = %d, Qualification = 0x%p, ExitInstructionLen = %d, GuestRip = 0x%p, GuestRsp = 0x%p\n",
 		ExitReason, ExitQualification, ExitInstructionLen, Cpu->Context.Rip, Cpu->Context.Rsp);
 
 	if (ExitReason == VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE) {
@@ -281,6 +288,7 @@ SetupVmcs(
 
 	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
+	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT64);
 
 	//
 	// Initialize host.
@@ -291,7 +299,7 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_DS_SELECTOR, AsmReadDs());
 	__vmx_vmwrite(HOST_FS_SELECTOR, AsmReadFs());
 	__vmx_vmwrite(HOST_GS_SELECTOR, AsmReadGs());
-	__vmx_vmwrite(HOST_TR_SELECTOR, AsmReadTr());
+	__vmx_vmwrite(HOST_TR_SELECTOR, g_GuestHostTrSelector);
 
 	__vmx_vmwrite(HOST_CR0, __readcr0());
 	//
@@ -303,9 +311,9 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_FS_BASE, 0);
 	__vmx_vmwrite(HOST_GS_BASE, (UINT64)Cpu);
 
-	__vmx_vmwrite(HOST_TR_BASE, (UINT64)Cpu->DescriptorTables.TssBase);
-	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)Cpu->DescriptorTables.GdtBase);
-	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)Cpu->DescriptorTables.IdtBase);
+	__vmx_vmwrite(HOST_TR_BASE, (UINT64)g_GuestHostTssBase);
+	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)g_GuestHostGdtBase);
+	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)g_GuestHostIdtBase);
 
 	__vmx_vmwrite(HOST_RIP, (UINT64)AsmVmExit);
 	__vmx_vmwrite(HOST_RSP, (UINT64)&Cpu->Data.HostStack);
@@ -318,7 +326,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_DS_SELECTOR, AsmReadDs());
 	__vmx_vmwrite(GUEST_LDTR_SELECTOR, AsmReadLdtr());
 
-	__vmx_vmwrite(GUEST_TR_SELECTOR, AsmReadTr());
+	__vmx_vmwrite(GUEST_TR_SELECTOR, g_GuestHostTrSelector);
 	__vmx_vmwrite(GUEST_FS_SELECTOR, AsmReadFs());
 	__vmx_vmwrite(GUEST_GS_SELECTOR, AsmReadGs());
 	__vmx_vmwrite(GUEST_CS_SELECTOR, AsmReadCs());
@@ -330,7 +338,7 @@ SetupVmcs(
 
 	__vmx_vmwrite(GUEST_FS_LIMIT, AsmLoadSegmentLimit(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_LIMIT, AsmLoadSegmentLimit(AsmReadGs()));
-	__vmx_vmwrite(GUEST_TR_LIMIT, AsmLoadSegmentLimit(AsmReadTr()));
+	__vmx_vmwrite(GUEST_TR_LIMIT, g_GuestHostTrLimit);
 
 	__vmx_vmwrite(GUEST_ES_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadEs()));
 	__vmx_vmwrite(GUEST_CS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadCs()));
@@ -338,7 +346,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_DS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadDs()));
 	__vmx_vmwrite(GUEST_FS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadGs()));
-	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadTr()));
+	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, g_GuestHostTrAccessRights);
 	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(0));
 
 	__vmx_vmwrite(GUEST_FS_BASE, (UINT64)Cpu);
@@ -347,15 +355,15 @@ SetupVmcs(
 	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadIdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)Cpu->DescriptorTables.IdtBase);
+	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)g_GuestHostIdtBase);
 	__vmx_vmwrite(GUEST_IDTR_LIMIT, Descriptor.Limit);
 
 	AsmReadGdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)Cpu->DescriptorTables.GdtBase);
+	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)g_GuestHostGdt);
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
 
-	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)Cpu->DescriptorTables.TssBase);
+	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)g_GuestHostGdtBase);
 
 	//
 	// Intel's propaganda to force everyone to use sysenter again.
@@ -372,20 +380,16 @@ SetupVmcs(
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());
 
-	//
-	// Test
-	//
-	UINT8* GuestAddress = TranslateGuestToHostAddress(0x1000);
-	GuestAddress[0] = 0xF4; // HLT
-	__vmx_vmwrite(GUEST_RIP, 0x1000);
-	__vmx_vmwrite(GUEST_RSP, 0x2000);
+	__vmx_vmwrite(GUEST_RIP, Cpu->Context.Rip);
+	__vmx_vmwrite(GUEST_RSP, Cpu->Context.Rsp);
 
-	DebugPrint0402("GUEST_RIP = 0x%x, GUEST_RSP = 0x%x\n", GuestAddress, 0x2000);
+	DebugPrint0402("GUEST_RIP = 0x%p, GUEST_RSP = 0x%p\n", Cpu->Context.Rip, Cpu->Context.Rsp);
 
 	UINT64 Error = __vmx_vmlaunch();
 	UINT64 ErrorExtended = 0;
 	__vmx_vmread(READONLY_VM_INSTRUCTION_ERROR, &ErrorExtended);
 	DebugPrint0402("Error vmlaunch: %d, Extended = 0x%p\n", Error, ErrorExtended);
+	DumpVmcs();
 }
 
 VOID
@@ -442,7 +446,7 @@ PrepareProcessor(
 	__writecr4(Cr4);
 
 	//
-	// Enable x2APIC. (Death to APIC and xAPIC)
+	// Enable x2APIC. (Death to APIC and xAPIC. Imagine doing MMIO lol)
 	//
 	UINT64 ApicBase = __readmsr(IA32_APIC_BASE);
 	ApicBase |= APIC_BASE_ENABLE_X2APIC;
@@ -453,30 +457,7 @@ PrepareProcessor(
 	//
 	// Set the GS base address to current CPU's control pointer.
 	//
-	_writegsbase_u64((unsigned long long)Cpu);
-
-	//
-	// 1:1 map descriptor structures. Read the disclaimer at Main.c for the other screw up.
-	// Warning: This will INEVITABLY BREAK if the Catalyst is not mapped over the 4GB limit and guest has more than 4GB memory. 
-	//
-	IA32_DESCRIPTOR Descriptor = { 0 };
-	AsmReadIdtr(&Descriptor);
-
-	Cpu->DescriptorTables.IdtBase = (VOID*)Descriptor.Base;
-	MapSinglePage((UINT64)Cpu->DescriptorTables.IdtBase, (UINT64)Cpu->DescriptorTables.IdtBase, FALSE);
-
-	AsmReadGdtr(&Descriptor);
-
-	Cpu->DescriptorTables.GdtBase = (VOID*)Descriptor.Base;
-	MapSinglePage((UINT64)Cpu->DescriptorTables.GdtBase, (UINT64)Cpu->DescriptorTables.GdtBase, FALSE);
-
-	Cpu->DescriptorTables.TssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
-	MapSinglePage((UINT64)Cpu->DescriptorTables.TssBase, (UINT64)Cpu->DescriptorTables.TssBase, FALSE);
-
-	//
-	// Set the interrupt handler for sexy ACPI shenanigans.
-	//
-	((X86_IDT_ENTRY*)Descriptor.Base)[209] = GenerateIdtEntry((UINT64)0, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
+	_writegsbase_u64((UINT64)Cpu);
 
 	//
 	// Read VMX revision ID.
@@ -491,8 +472,8 @@ PrepareProcessor(
 	Cpu->Vmx.Vmcs.RevisionIdentifier	= Revision;
 	Cpu->Vmx.VmxOn.RevisionIdentifier	= Revision;
 
-	DebugPrint0402("VMXON = %p\n", &Cpu->Vmx.VmxOn);
-	DebugPrint0402("VMCS = %p\n", &Cpu->Vmx.Vmcs);
+	DebugPrint0402("VMXON = %p\n",	&Cpu->Vmx.VmxOn);
+	DebugPrint0402("VMCS = %p\n",	&Cpu->Vmx.Vmcs);
 
 	//
 	// Set VMXON region.
@@ -523,5 +504,3 @@ PrepareProcessor(
 	//
 	SetupVmcs();
 }
-
-#endif

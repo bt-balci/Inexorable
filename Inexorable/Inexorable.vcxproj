@@ -140,6 +140,8 @@
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>false</ExceptionHandling>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
@@ -148,8 +150,10 @@
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <BaseAddress>0x10000</BaseAddress>
+      <BaseAddress>0x1000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <FixedBaseAddress>true</FixedBaseAddress>
+      <SectionAlignment>4096</SectionAlignment>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -167,6 +171,8 @@
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
+      <ExceptionHandling>false</ExceptionHandling>
+      <BufferSecurityCheck>false</BufferSecurityCheck>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
@@ -175,8 +181,10 @@
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <BaseAddress>0x10000</BaseAddress>
+      <BaseAddress>0x1000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <FixedBaseAddress>true</FixedBaseAddress>
+      <SectionAlignment>4096</SectionAlignment>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>

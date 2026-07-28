@@ -1,6 +1,3 @@
-#ifndef _MEMORY_C_
-#define _MEMORY_C_
-
 #include <Uefi.h>
 
 #include "Efi.h"
@@ -40,17 +37,17 @@ TranslateGuestToHostAddress(
         GuestPhysicalAddress, Pml4Idx, PdptIdx, PdIdx, PtIdx);
 
     EPT_PML4* Epml4 = &g_Epml4[Pml4Idx];
-    DebugPrint0402("Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
+    //DebugPrint0402("Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
     if (!Epml4->Present)
         return NULL;
 
     EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
-    DebugPrint0402("Pdpt = 0x%x at 0x%p\n", Pdpt->All, Pdpt);
+    //DebugPrint0402("Pdpt = 0x%x at 0x%p\n", Pdpt->All, Pdpt);
     if (!Pdpt->Present)
         return NULL;
 
     EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
-    DebugPrint0402("Pd = 0x%x at 0x%p\n", Pd->All, Pd);
+    //DebugPrint0402("Pd = 0x%x at 0x%p\n", Pd->All, Pd);
     if (!Pd->Present)
         return NULL;
 
@@ -60,7 +57,7 @@ TranslateGuestToHostAddress(
     */
 
     EPT_PTE* Pt = &(((EPT_PTE*)(((EPT_PDE*)Pd)->PhysicalAddress << 12))[PtIdx]);
-    DebugPrint0402("Pt = 0x%x at 0x%p\n", Pt->All, Pt);
+    //DebugPrint0402("Pt = 0x%x at 0x%p\n", Pt->All, Pt);
     if (!Pt->Present)
         return NULL;
 
@@ -254,5 +251,3 @@ MapPagesLinear(
 
     return TRUE;
 }
-
-#endif

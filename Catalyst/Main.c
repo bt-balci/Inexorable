@@ -1,6 +1,3 @@
-#ifndef _MAIN_C_
-#define _MAIN_C_
-
 #include <Uefi.h>
 #include <Base.h>
 #include <Library/BaseMemoryLib.h>
@@ -19,15 +16,20 @@
 //
 // Inclusion skill issue.
 //
-EFI_SYSTEM_TABLE* gST = NULL;
-EFI_BOOT_SERVICES* gBS = NULL;
-EFI_RUNTIME_SERVICES* gRT = NULL;
+EFI_SYSTEM_TABLE*		gST = NULL;
+EFI_BOOT_SERVICES*		gBS = NULL;
+EFI_RUNTIME_SERVICES*	gRT = NULL;
+
 CHAR8* gEfiCallerBaseName = "BT-BALCI";
+
 CONST UINT8 g_InexorableEfi[] = {
  #embed "../x64/Debug/inexorable.efi"
 };
 CONST UINTN g_InexorableEfiSize = sizeof(g_InexorableEfi);
+
 UINT64 g_CurrentGuestPhysicalAddress = 0;
+
+CONST UINT8 g_ApHalt[] = { 0xF4 };
 
 CATALYST_VIRTUAL_CPU VirtualProcessors[CONFIG_CPU_COUNT] = {0};
 
@@ -35,7 +37,7 @@ STATIC
 EFI_STATUS
 EFIAPI
 PrepareProcessors(
-	VOID
+	IN VOID* GuestRip
 ) {
 	EFI_MP_SERVICES_PROTOCOL* MpServices = NULL;
 
@@ -67,18 +69,71 @@ PrepareProcessors(
 	DebugPrint0402("Total of %d processors, %d enabled\n", TotalProcessors, EnabledProcessors);
 
 	//
+	// The guest OS will wake up APs. They must "sleep".
+	//
+	{
+		CATALYST_VIRTUAL_CPU* Cpu = &VirtualProcessors[0];
+		Cpu->Context.Rip = (UINT64)GuestRip;
+		//Cpu->Context.Rsp = GUEST_INITIAL_RSP;
+	}
+
+	//
+	// Initialize globals for each guest CPU.
+	// Because for APs started via EFI_MP_SERVICES_PROTOCOL, the TR and other segment values are invalid for VMX.
+	//
+
+	IA32_DESCRIPTOR Descriptor = { 0 };
+	AsmReadGdtr(&Descriptor);
+
+	//
+	// 1:1 map descriptor structures. Read the disclaimer at Main.c for the other screw up.
+	// Warning: This will INEVITABLY BREAK if the Catalyst is not mapped over the 4GB limit and guest has more than 4GB memory. 
+	//
+	g_GuestHostGdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)g_GuestHostGdtBase, (UINT64)g_GuestHostGdtBase, FALSE);
+
+	g_GuestHostTssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
+	MapSinglePage((UINT64)g_GuestHostTssBase, (UINT64)g_GuestHostTssBase, FALSE);
+
+	AsmReadIdtr(&Descriptor);
+
+	g_GuestHostIdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)g_GuestHostIdtBase, (UINT64)g_GuestHostIdtBase, FALSE);
+
+	g_GuestHostTrSelector = AsmReadTr();
+	g_GuestHostTrAccessRights = AsmLoadSegmentAccessRights(g_GuestHostTrSelector);
+	g_GuestHostTrLimit = AsmLoadSegmentLimit(g_GuestHostTrSelector);
+
+	//
+	// Set the interrupt handler for sexy ACPI shenanigans.
+	//
+	((X86_IDT_ENTRY*)Descriptor.Base)[209] = GenerateIdtEntry((UINT64)0, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
+
+	//
 	// Index = 1 to skip the BSP (current processor).
 	//
 	for (UINTN i = 1; i < CONFIG_CPU_COUNT; i++) {
-		CATALYST_VIRTUAL_CPU* Processor = &VirtualProcessors[i];
-		Processor->Index = i;
+		CATALYST_VIRTUAL_CPU* Cpu = &VirtualProcessors[i];
+		Cpu->Index = i;
+
+		//
+		// They should halt and wait for mommy SIPI from guest OS like a good little boy.
+		//
+		Cpu->Context.Rip = (UINT64)&g_ApHalt;
+		
+		//
+		// Set it. Forget it. APs won't use the stack anyway.
+		// Or will they?
+		// No.
+		//
+		Cpu->Context.Rsp = GUEST_INITIAL_RSP;
 
 		DebugPrint0402("Starting AP %d...\n", i);
 
 		//
 		// Start in blocking mode. We will wait until each one of them finishes.
 		//
-		Status = MpServices->StartupThisAP(MpServices, PrepareProcessor, i, NULL, 0, (VOID*)Processor, NULL);
+		Status = MpServices->StartupThisAP(MpServices, PrepareProcessor, i, NULL, 0, (VOID*)Cpu, NULL);
 		if (EFI_ERROR(Status)) {
 			DebugPrint0402("Failed starting AP %d. Error: %r\n", i, Status);
 			return Status;
@@ -106,8 +161,10 @@ LoadFirmware(
 	// Could we have just did gBS->LoadImage?
 	// Perhaps. Then why I didn't do it? For fixed base addresses.
 	// I don't want no implementation specific stuff happening to PE file I load.
-	// We don't want to relocate it. And UEFI will sure as hell relocate it.
+	// We don't want to relocate it. And HP's spyware-ass UEFI implementation will sure as hell relocate it.
 	//
+
+	DebugPrint0402("Mapping firmware...\n");
 
 	EFI_IMAGE_DOS_HEADER* DosHeader = (EFI_IMAGE_DOS_HEADER*)&g_InexorableEfi;
 
@@ -122,35 +179,47 @@ LoadFirmware(
 		DebugPrint0402("Catalyst only supports x86_64 firmwares.\n");
 		return EFI_UNSUPPORTED;
 	}
-	
+
 	EFI_IMAGE_OPTIONAL_HEADER64* OptionalHeader = &NtHeaders->OptionalHeader;
 
-	if (OptionalHeader->ImageBase != 0) {
-		DebugPrint0402("The firmware preferred ImageBase must be exactly 0.\n");
+	if (OptionalHeader->ImageBase != FIRMWARE_IMAGE_BASE) {
+		DebugPrint0402("The firmware preferred ImageBase must be exactly 0x%p.\n", FIRMWARE_IMAGE_BASE);
 		return EFI_UNSUPPORTED;
 	}
 
-	UINT64 GuestBaseAddress = 0;
+	if (OptionalHeader->SectionAlignment != 0x1000) {
+		DebugPrint0402("The firmware executable's section alignment must be 0x1000.\n");
+		return EFI_UNSUPPORTED;
+	}
+
+	UINT64 GuestBaseAddress = FIRMWARE_IMAGE_BASE;
 	UINT8* HostBaseAddress = (UINT8*)TranslateGuestToHostAddress(GuestBaseAddress);
+
+	DebugPrint0402("Firmware image base GPA = 0x%p, HPA = 0x%p\n", GuestBaseAddress, HostBaseAddress);
 	
 	//
 	// This assumes header is less than 4096 bytes.
 	// It should be. If your header is bigger than 4096 bytes don't talk to me.
 	//
+	DebugPrint0402("Copying headers from 0x%p to 0x%p with length 0x%p\n", (VOID*)&g_InexorableEfi, HostBaseAddress, OptionalHeader->SizeOfHeaders);
 	CopyMem((VOID*)HostBaseAddress, (VOID*)&g_InexorableEfi, OptionalHeader->SizeOfHeaders);
 	
+	DebugPrint0402("Copying sections.\n");
+
 	EFI_IMAGE_SECTION_HEADER* Section = (EFI_IMAGE_SECTION_HEADER*)((UINT8*)OptionalHeader + NtHeaders->FileHeader.SizeOfOptionalHeader);
-	
+
 	for (UINT32 SectionIndex = 0; SectionIndex < NtHeaders->FileHeader.NumberOfSections; SectionIndex++) {
 		UINT64	CurrentGuestAddress	= Section->VirtualAddress + GuestBaseAddress;
 		UINT8*	Source				= (UINT8*)&g_InexorableEfi + Section->PointerToRawData;
 		UINTN	RemainingBytes		= Section->SizeOfRawData;
 
+		DebugPrint0402("Section %.8a. Virtual Address = 0x%p, Size of Raw Data = 0x%p\n", &Section->Name, Section->VirtualAddress, Section->SizeOfRawData);
+
 		//
 		// Guest's memory is contiguous. But the host's memory is not. We have to recalculate for each page.
 		//
 		while (RemainingBytes > 0) {
-			UINT64 PageOffset = RemainingBytes & 0xFFF;
+			UINT64 PageOffset = CurrentGuestAddress & 0xFFF;
 
 			//
 			// Substract from 0x1000 to deetermine amounts of bytes to write. Because if we only took the PageOffset it could be zero.
@@ -187,13 +256,8 @@ LoadFirmware(
 		Section++;
 	}
 
-	//
-	// Remember the invariant that ImageBase = 0 still holds.
-	// Absolute Address = RVA + Base. So:
-	// Absolute Address = OptionalHeader->AddressOfEntryPoint + 0
-	//
-	*GuestEntryPoint = (VOID*)(UINT64)OptionalHeader->AddressOfEntryPoint;
-	DebugPrint0402("Firmware mapped to 0x0. ImageSize = %d\n", OptionalHeader->SizeOfImage);
+	*GuestEntryPoint = (VOID*)(UINT64)OptionalHeader->AddressOfEntryPoint + FIRMWARE_IMAGE_BASE;
+	DebugPrint0402("Firmware mapped. ImageSize = %d, ImageBase= 0x%p\n", OptionalHeader->SizeOfImage, FIRMWARE_IMAGE_BASE);
 
 	return EFI_SUCCESS;
 }
@@ -255,7 +319,7 @@ MapMemory(
 	//
 	// Why not map the first 4GB only?
 	// Because of the memory holes, there is actually more RAM than there is (approximately 5GB for a 4GB machine)
-	// And we start at 4.5GB~. So we need to map all first 512GBs to make sure we won't bork ourselves.
+	// And we start at 5GB~. So we need to map all first 512GBs to make sure we won't bork ourselves.
 	// ^^^^
 	// This might screw me over, but okay.
 	//
@@ -301,7 +365,7 @@ MapMemory(
 		Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Desc + DescriptorSize);
 	}
 
-	DebugPrint0402("Total of 0x%p bytes of contiguous address space for the guest", TotalBytes);
+	DebugPrint0402("Total of 0x%p bytes of contiguous address space for the guest\n", TotalBytes);
 
 	//
 	// Forcefully map the host physical memory holding our Guest Page Tables
@@ -313,12 +377,19 @@ MapMemory(
 
 	UINT64 PdpeHpa = (UINT64)&g_IdentityPdpe[0];
 	//
-	// Map enough pages to cover the 512 PDPE entries (usually just 1 page, but doing a few ensures we don't cut it off).
+	// Identity map the PDPEs. Gently...
 	//
-	for (UINTN i = 0; i < 4; i++) {
+	for (UINT32 i = 0; i < 512; i++) {
 		if (!MapSinglePage(PdpeHpa + (i * 0x1000), PdpeHpa + (i * 0x1000), FALSE)) {
 			DebugPrint0402("Failed to map Guest CR3 structures!\n");
 		}
+	}
+
+	//
+	// Map the HLT area for APs to wake up at.
+	//
+	if (!MapSinglePage((UINT64)&g_ApHalt, (UINT64)&g_ApHalt, FALSE)) {
+		DebugPrint0402("Failed to map Guest CR3 structures!\n");
 	}
 
 	DebugPrint0402("Explicitly mapped Guest CR3 structures into EPT\n");
@@ -332,13 +403,33 @@ EFI_STATUS
 EFIAPI
 UefiMain(
 	IN EFI_HANDLE			ImageHandle,
-	IN EFI_SYSTEM_TABLE* SystemTable
+	IN EFI_SYSTEM_TABLE*	SystemTable
 ) {
 	gST = SystemTable;
 	gBS = SystemTable->BootServices;
 	gRT = SystemTable->RuntimeServices;
 
 	DebugPrint0402("Welcome to Catalyst - Inexorable Hypervisor\n");
+
+	EFI_LOADED_IMAGE_PROTOCOL* LoadedImage = NULL;
+
+	EFI_STATUS Status = gBS->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
+
+	//
+	// We need this for debugging
+	//
+	if (Status == EFI_SUCCESS
+		&& FALSE) {
+		DebugPrint0402("Catalyst.efi loaded at 0x%p, with size 0x%p", LoadedImage->ImageBase, LoadedImage->ImageSize);
+		{
+			volatile UINT32 Spin = 1;
+			while (Spin) {
+				__asm__ __volatile__("pause");
+			}
+		}
+	}
+
+	DebugPrint0402("Failed to open LoadedImageProtocol: %r\n", Status);
 
 	//
 	// VMX support must be present.
@@ -362,14 +453,14 @@ UefiMain(
 	//
 	// Construct page tables for guest.
 	//
-	EFI_STATUS Status = MapMemory();
+	Status = MapMemory();
 	if (EFI_ERROR(Status)) {
 		DebugPrint0402("Failed to map memory: %r\n", Status);
 		return Status;
 	}
 
 	//
-	// Map the firmware to memory. (0 my beloved)
+	// Map the firmware to memory. (FIRMWARE_IMAGE_BASE my beloved)
 	//
 	VOID* GuestRIP = 0;
 	Status = LoadFirmware(&GuestRIP);
@@ -383,7 +474,7 @@ UefiMain(
 	//
 	// All processors must be woken up and ready.
 	//
-	Status = PrepareProcessors();
+	Status = PrepareProcessors(GuestRIP);
 	if (EFI_ERROR(Status)) {
 		DebugPrint0402("Failed to prepare processors: %r\n", Status);
 		return Status;
@@ -391,5 +482,3 @@ UefiMain(
 
 	return EFI_SUCCESS;
 }
-
-#endif

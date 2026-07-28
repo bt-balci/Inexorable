@@ -5,6 +5,29 @@
 #include "x86.h"
 
 ///////////////////////////////////////////////
+////				Globals				   ////
+///////////////////////////////////////////////
+
+__attribute__((aligned(4096))) extern X86_IDT_ENTRY	g_GuestHostIdt[256];
+__attribute__((aligned(4096))) extern X86_GDT_ENTRY	g_GuestHostGdt[8192];
+__attribute__((aligned(4096))) extern UINT8			g_GuestHostTss[104];
+
+extern VOID* g_GuestHostIdtBase;
+extern VOID* g_GuestHostGdtBase;
+extern VOID* g_GuestHostTssBase;
+
+extern UINT16 g_GuestHostTrSelector;
+extern UINT16 g_GuestHostTrAccessRights;
+extern UINT16 g_GuestHostTrLimit;
+
+///////////////////////////////////////////////
+////			  Definitions			   ////
+///////////////////////////////////////////////
+
+#define GUEST_INITIAL_RSP		SIZE_8GB
+#define FIRMWARE_IMAGE_BASE		0x1000
+
+///////////////////////////////////////////////
 ////				Methods				   ////
 ///////////////////////////////////////////////
 
@@ -34,20 +57,6 @@ typedef struct {
 	} Vmx;
 
 	X86_CONTEXT_AREA Context;
-
-
-	struct {
-		__attribute__((aligned(4096))) X86_IDT_ENTRY Idt[256];
-		__attribute__((aligned(4096))) X86_GDT_ENTRY Gdt[8192];
-		__attribute__((aligned(4096))) UINT8 Tss[104];
-
-		//
-		// These bases are in GPA.
-		//
-		VOID* IdtBase;
-		VOID* GdtBase;
-		VOID* TssBase;
-	} DescriptorTables;	
 
 	struct {
 		UINT8 MsrBitmap[0x1000];
