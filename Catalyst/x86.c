@@ -6,6 +6,7 @@
 #include "x86.h"
 
 X86_GDT_ENTRY
+EFIAPI
 CreateGdtEntry(
 	IN UINT32	Base,
 	IN UINT32	Limit,
@@ -55,6 +56,7 @@ CreateGdtEntry(
 }
 
 X86_GDT_SYSTEM_ENTRY
+EFIAPI
 CreateGdtSystemEntry(
 	IN UINT64	Base,
 	IN UINT32	Limit,
@@ -93,6 +95,7 @@ CreateGdtSystemEntry(
 }
 
 X86_IDT_ENTRY
+EFIAPI
 GenerateIdtEntry(
 	IN UINT64	Offset,
 	IN UINT16	Selector,
@@ -127,6 +130,7 @@ GenerateIdtEntry(
 }
 
 BOOLEAN
+EFIAPI
 IsVmxSupported(
 	VOID
 ) {
@@ -138,8 +142,8 @@ IsVmxSupported(
 	return (Ecx & (VMX_SUPPORT_BIT)) != 0;
 }
 
-
 BOOLEAN
+EFIAPI
 IsVmxEnabled(
 	VOID
 ) {
@@ -160,4 +164,24 @@ IsVmxEnabled(
 	}
 
 	return TRUE;
+}
+
+VOID
+EFIAPI
+SendInterrupt(
+	IN UINT8					Vector,
+	IN ApicDestinationShorthand Shorthand		OPTIONAL,
+	IN UINT32					DestinationId	OPTIONAL
+) {
+	INTERRUPT_COMMAND_REGISTER Register = {
+		.Vector = Vector,
+		.DeliveryMode = ApicDeliveryModeFixed,
+		.DestinationMode = ApicDestinationModeLogical,
+		.TriggerMode = ApicTriggerModeEdge,
+		.DestinationShort = (UINT64)Shorthand,
+		.Level = ApicLevelAssert,
+		.ApicId = (Shorthand == ApicDestinationShorthandNone) ? DestinationId : 0
+	};
+
+	__writemsr(IA32_X2APIC_ICR, Register.All);
 }

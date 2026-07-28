@@ -267,6 +267,18 @@ AdjustVmcsControl(
 
 VOID
 EFIAPI
+StartVm(
+	VOID
+) {
+	UINT64 Error = __vmx_vmlaunch();
+	UINT64 ErrorExtended = 0;
+	__vmx_vmread(READONLY_VM_INSTRUCTION_ERROR, &ErrorExtended);
+	DebugPrint0402("Error vmlaunch: %d, Extended = 0x%p\n", Error, ErrorExtended);
+	DumpVmcs();
+}
+
+VOID
+EFIAPI
 SetupVmcs(
 	VOID
 ) {
@@ -282,7 +294,7 @@ SetupVmcs(
 	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, 0));
 
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps | ProcessorBasedHltExiting)));
+		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
 
@@ -384,12 +396,6 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_RSP, Cpu->Context.Rsp);
 
 	DebugPrint0402("GUEST_RIP = 0x%p, GUEST_RSP = 0x%p\n", Cpu->Context.Rip, Cpu->Context.Rsp);
-
-	UINT64 Error = __vmx_vmlaunch();
-	UINT64 ErrorExtended = 0;
-	__vmx_vmread(READONLY_VM_INSTRUCTION_ERROR, &ErrorExtended);
-	DebugPrint0402("Error vmlaunch: %d, Extended = 0x%p\n", Error, ErrorExtended);
-	DumpVmcs();
 }
 
 VOID

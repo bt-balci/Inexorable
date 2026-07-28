@@ -48,6 +48,41 @@
 )
 
 ///////////////////////////////////////////////
+////				Enums				   ////
+///////////////////////////////////////////////
+
+typedef enum {
+	ApicDeliveryModeFixed = 0,
+	ApicDeliveryModeLowest = 1,
+	ApicDeliveryModeSMI = 2,
+	ApicDeliveryModeNMI = 4,
+	ApicDeliveryModeINIT = 5,
+	ApicDeliveryModeStartup = 6
+} ApicDeliveryMode;
+
+typedef enum {
+	ApicDestinationModePhysical = 0,
+	ApicDestinationModeLogical = 1
+} ApicDestinationMode;
+
+typedef enum {
+	ApicDestinationShorthandNone = 0,
+	ApicDestinationShorthandAll = 1,
+	ApicDestinationShorthandAllIncludingSelf = 2,
+	ApicDestinationShorthandAllExcludingSelf = 3
+} ApicDestinationShorthand;
+
+typedef enum {
+	ApicTriggerModeEdge = 0,
+	ApicTriggerModeLevel = 1
+} ApicTriggerMode;
+
+typedef enum {
+	ApicLevelAssert = 0,
+	ApicLevelDeAssert = 1
+} ApicLevel;
+
+///////////////////////////////////////////////
 ////				Structs				   ////
 ///////////////////////////////////////////////
 
@@ -58,6 +93,22 @@ typedef struct {
 	UINT32 RevisionIdentifier;
 	UINT8 Reserved[4092];
 } __attribute__((aligned(4096))) INTEL_VMX_REGION;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Vector : 8;
+		UINT64 DeliveryMode : 3;
+		UINT64 DestinationMode : 1;
+		UINT64 Reserved : 2;
+		UINT64 Level : 1;
+		UINT64 TriggerMode : 1;
+		UINT64 Reserved2 : 2;
+		UINT64 DestinationShort : 2;
+		UINT64 Reserved3 : 12;
+		UINT64 ApicId : 32;
+	};
+} INTERRUPT_COMMAND_REGISTER;
 
 typedef struct {
 	UINT16 LimitLow;
@@ -453,16 +504,19 @@ typedef struct {
 ///////////////////////////////////////////////
 
 BOOLEAN
+EFIAPI
 IsVmxEnabled(
 	VOID
 );
 
 BOOLEAN
+EFIAPI
 IsVmxSupported(
 	VOID
 );
 
 X86_IDT_ENTRY
+EFIAPI
 GenerateIdtEntry(
 	IN UINT64	Offset,
 	IN UINT16	Selector,
@@ -471,6 +525,7 @@ GenerateIdtEntry(
 );
 
 X86_GDT_ENTRY
+EFIAPI
 CreateGdtEntry(
 	IN UINT32	Base,
 	IN UINT32	Limit,
@@ -480,6 +535,14 @@ CreateGdtEntry(
 	IN UINT8	IsLongMode,
 	IN UINT8	Is32Bit,
 	IN UINT8	Granularity
+);
+
+VOID
+EFIAPI
+SendInterrupt(
+	IN UINT8					Vector,
+	IN ApicDestinationShorthand Shorthand		OPTIONAL,
+	IN UINT32					DestinationId	OPTIONAL
 );
 
 inline UINT64 __readcr0(VOID) {

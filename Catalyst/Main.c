@@ -81,7 +81,6 @@ PrepareProcessors(
 	// Initialize globals for each guest CPU.
 	// Because for APs started via EFI_MP_SERVICES_PROTOCOL, the TR and other segment values are invalid for VMX.
 	//
-
 	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadGdtr(&Descriptor);
 
@@ -100,14 +99,14 @@ PrepareProcessors(
 	g_GuestHostIdtBase = (VOID*)Descriptor.Base;
 	MapSinglePage((UINT64)g_GuestHostIdtBase, (UINT64)g_GuestHostIdtBase, FALSE);
 
-	g_GuestHostTrSelector = AsmReadTr();
-	g_GuestHostTrAccessRights = AsmLoadSegmentAccessRights(g_GuestHostTrSelector);
-	g_GuestHostTrLimit = AsmLoadSegmentLimit(g_GuestHostTrSelector);
+	g_GuestHostTrSelector		= AsmReadTr();
+	g_GuestHostTrAccessRights	= AsmLoadSegmentAccessRights(g_GuestHostTrSelector);
+	g_GuestHostTrLimit			= AsmLoadSegmentLimit(g_GuestHostTrSelector);
 
 	//
-	// Set the interrupt handler for sexy ACPI shenanigans.
+	// Set the interrupt handler for sexy APIC shenanigans.
 	//
-	((X86_IDT_ENTRY*)Descriptor.Base)[209] = GenerateIdtEntry((UINT64)0, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
+	((X86_IDT_ENTRY*)Descriptor.Base)[209] = GenerateIdtEntry((UINT64)StartVm, AsmReadCs(), X86_GATE_TYPE_INTERRUPT, 0);
 
 	//
 	// Index = 1 to skip the BSP (current processor).
@@ -479,6 +478,13 @@ UefiMain(
 		DebugPrint0402("Failed to prepare processors: %r\n", Status);
 		return Status;
 	}
+
+	DebugPrint0402("Virtualizing system...\n");
+
+	//
+	// Virtualize em' all.
+	//
+	SendInterrupt(209, ApicDestinationShorthandAllIncludingSelf, 0);
 
 	return EFI_SUCCESS;
 }
