@@ -177,6 +177,7 @@ LoadFirmware(
 	// Perhaps. Then why I didn't do it? For fixed base addresses.
 	// I don't want no implementation specific stuff happening to PE file I load.
 	// We don't want to relocate it. And HP's spyware-ass UEFI implementation will sure as hell relocate it.
+	// (Even though this POC won't run in HP computers, I felt an immense impulse just to fuck with HP)
 	//
 
 	DebugPrint0402("Mapping firmware...\n");

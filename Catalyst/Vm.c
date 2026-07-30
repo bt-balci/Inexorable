@@ -164,8 +164,8 @@ VmExitHandler(
 	//
 	ExitReason &= 0xFFFF;
 
-	DebugPrint0402("VMEXIT: Reason = %d, Qualification = 0x%p, ExitInstructionLen = %d, GuestRip = 0x%p, GuestRsp = 0x%p\n",
-		ExitReason, ExitQualification, ExitInstructionLen, Cpu->Context.Rip, Cpu->Context.Rsp);
+	DebugPrint0402("VMEXIT[%d]: Reason = %d, Qualification = 0x%p, ExitInstructionLen = %d, GuestRip = 0x%p, GuestRsp = 0x%p\n",
+		Cpu->Index, ExitReason, ExitQualification, ExitInstructionLen, Cpu->Context.Rip, Cpu->Context.Rsp);
 
 	if (ExitReason == VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE) {
 		DebugPrint0402("VMCS is borked\n");
@@ -200,6 +200,16 @@ VmExitHandler(
 
 		goto Bork;
 	}
+	else if (ExitReason == VMEXIT_REASON_VMCALL) {
+		DebugPrint0402("Guest made a hypervisor call. Function = 0x%p, Arg1 = 0x%p, Arg2 = 0x%p, Arg3 = 0x%p, Arg4 = 0x%p\n",
+			Cpu->Context.Rax, Cpu->Context.Rcx, Cpu->Context.Rdx, Cpu->Context.R8, Cpu->Context.R9);
+		Cpu->Context.Rax = 1;
+	}
+
+	//
+	// Advance Guest RIP.
+	//
+	__vmx_vmwrite(GUEST_RIP, Cpu->Context.Rip + ExitInstructionLen);
 
 	goto End;
 
@@ -291,7 +301,7 @@ SetupVmcs(
 	//
 	__vmx_vmwrite(VMEXIT_CONTROLS, AdjustVmcsControl(VMEXIT_CONTROLS, VmExitHostAddressSpaceSize));
 	__vmx_vmwrite(VMENTRY_CONTROLS, AdjustVmcsControl(VMENTRY_CONTROLS, VmEntryIa32eModeGuest));
-	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, 0));
+	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, PinBasedExternalInterruptExiting));
 
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps)));
@@ -315,7 +325,7 @@ SetupVmcs(
 
 	__vmx_vmwrite(HOST_CR0, __readcr0());
 	//
-	// Because for some reason, original identity page tables stay in EfiConventionalMemory.
+	// Because for some reason, original identity page tables stay in EfiConventionalMemory. Which EPT mapping overwrites... Bruh
 	//
 	__vmx_vmwrite(HOST_CR3, g_IdentityCr3.All);
 	__vmx_vmwrite(HOST_CR4, __readcr4());

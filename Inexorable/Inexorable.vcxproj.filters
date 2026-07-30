@@ -23,5 +23,11 @@
     <ClInclude Include="Efi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="x86.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Util.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
