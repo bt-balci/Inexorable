@@ -24,8 +24,8 @@ extern UINT16 g_GuestHostTrLimit;
 ////			  Definitions			   ////
 ///////////////////////////////////////////////
 
-#define GUEST_INITIAL_RSP		SIZE_8GB
 #define FIRMWARE_IMAGE_BASE		0x1000
+#define BSP_INITIAL_STACK_SIZE	4
 
 ///////////////////////////////////////////////
 ////				Methods				   ////

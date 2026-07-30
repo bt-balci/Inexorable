@@ -33,9 +33,6 @@ TranslateGuestToHostAddress(
     UINT16 PtIdx    = (GuestPhysicalAddress >> 12) & 0x1FF;
     UINT16 Offset   = (GuestPhysicalAddress) & 0xFFF;
 
-    DebugPrint0402("Translating GPA = 0x%p to HPA. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", 
-        GuestPhysicalAddress, Pml4Idx, PdptIdx, PdIdx, PtIdx);
-
     EPT_PML4* Epml4 = &g_Epml4[Pml4Idx];
     //DebugPrint0402("Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
     if (!Epml4->Present)
@@ -63,7 +60,7 @@ TranslateGuestToHostAddress(
 
     UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12) + Offset;
 
-    DebugPrint0402("GPA = 0x%p, translates to HPA = 0x%p\n", GuestPhysicalAddress, Result);
+    DebugPrint0402("GPA = 0x%p, translates to HPA = 0x%p. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", GuestPhysicalAddress, Result, Pml4Idx, PdptIdx, PdIdx, PtIdx);
     return (VOID*)Result;
 }
 
@@ -80,7 +77,7 @@ MapSinglePage(
     UINT16 PtIdx    = (GuestPhysical >> 12) & 0x1FF;
 
     //DebugPrint0402("Mapping GPA = %p to HPA = %p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n",
-    //    GuestPhysical, HostPhysical, Big, Pml4Idx, PdptIdx, PdIdx, PtIdx);
+        //GuestPhysical, HostPhysical, Big, Pml4Idx, PdptIdx, PdIdx, PtIdx);
 
     //
     // PML4 Level
@@ -223,7 +220,10 @@ MapPagesLinear(
 
         //DebugPrint0402("BytesRemaining = %d, IsAligned = %d, IsLargeEnough = %d\n", BytesRemaining, IsAligned, IsLargeEnough);
 
-        if (IsAligned && IsLargeEnough && 0) {
+        //
+        // Never map large pages.
+        //
+        if (IsAligned && IsLargeEnough && FALSE) {
             //
             // Map 2MB page.
             //

@@ -74,6 +74,22 @@ PrepareProcessors(
 	{
 		CATALYST_VIRTUAL_CPU* Cpu = &VirtualProcessors[0];
 		Cpu->Context.Rip = (UINT64)GuestRip;
+
+		//
+		// Map the initial guest stack.
+		//
+		Status = gBS->AllocatePages(AllocateAnyPages, EfiRuntimeServicesData, BSP_INITIAL_STACK_SIZE, (EFI_PHYSICAL_ADDRESS*)&Cpu->Context.Rsp);
+		if (EFI_ERROR(Status)) {
+			DebugPrint0402("Failed to allocate memory for guest's initial stack: %r\n", Status);
+			return Status;
+		}
+
+		for (UINT32 i = 0; i < BSP_INITIAL_STACK_SIZE; i++) {
+			if (!MapSinglePage(Cpu->Context.Rsp + (i * 0x1000), Cpu->Context.Rsp + (i * 0x1000), FALSE)) {
+				DebugPrint0402("Failed to map BSP initial stack!\n");
+			}
+		}
+
 		//Cpu->Context.Rsp = GUEST_INITIAL_RSP;
 	}
 
@@ -125,7 +141,7 @@ PrepareProcessors(
 		// Or will they?
 		// No.
 		//
-		Cpu->Context.Rsp = GUEST_INITIAL_RSP;
+		Cpu->Context.Rsp = 0;
 
 		DebugPrint0402("Starting AP %d...\n", i);
 
@@ -256,7 +272,7 @@ LoadFirmware(
 	}
 
 	*GuestEntryPoint = (VOID*)(UINT64)OptionalHeader->AddressOfEntryPoint + FIRMWARE_IMAGE_BASE;
-	DebugPrint0402("Firmware mapped. ImageSize = %d, ImageBase= 0x%p\n", OptionalHeader->SizeOfImage, FIRMWARE_IMAGE_BASE);
+	DebugPrint0402("Firmware mapped. ImageSize = 0x%p, ImageBase= 0x%p\n", OptionalHeader->SizeOfImage, FIRMWARE_IMAGE_BASE);
 
 	return EFI_SUCCESS;
 }
@@ -381,6 +397,7 @@ MapMemory(
 	for (UINT32 i = 0; i < 512; i++) {
 		if (!MapSinglePage(PdpeHpa + (i * 0x1000), PdpeHpa + (i * 0x1000), FALSE)) {
 			DebugPrint0402("Failed to map Guest CR3 structures!\n");
+			return EFI_NO_MAPPING;
 		}
 	}
 
@@ -389,10 +406,8 @@ MapMemory(
 	//
 	if (!MapSinglePage((UINT64)&g_ApHalt, (UINT64)&g_ApHalt, FALSE)) {
 		DebugPrint0402("Failed to map Guest CR3 structures!\n");
+		return EFI_NO_MAPPING;
 	}
-
-	DebugPrint0402("Explicitly mapped Guest CR3 structures into EPT\n");
-
 End:
 	gBS->FreePool(DescriptorArray);
 	return Status;
