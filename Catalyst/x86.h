@@ -422,41 +422,13 @@ typedef union {
 typedef union {
 	UINT32 All;
 	struct {
-		UINT32 Vector : 8;
-		UINT32 Type : 3;
-		UINT32 DeliverErrorCode : 1;
-		UINT32 Reserved : 19;
-		UINT32 Valid : 1;
-	};
-} VMX_INTERRUPTION_INFORMATION;
-
-typedef union {
-	UINT32 All;
-	struct {
 		UINT32 Present : 1;
 		UINT32 Write : 1;
 		UINT32 User : 1;
-		UINT32 ReservedBitSet : 1;
-		UINT32 NxViolation : 1;
-		UINT32 ProtectionKeyViolation : 1;
-		UINT32 Reserved : 26;
-	};
-} VMX_PAGE_FAULT_ERROR_CODE;
-
-typedef union {
-	UINT32 All;
-	struct {
-		UINT32 Read : 1;
-		UINT32 Write : 1;
+		UINT32 ReservedBitsSet : 1;
 		UINT32 Execute : 1;
-		UINT32 IsReadable : 1;
-		UINT32 IsWritable : 1;
-		UINT32 IsExecutable : 1;
-		UINT32 UserExecute : 1;
-		UINT32 GuestLinearAddressValid : 1;
-		UINT32 TranslationBork : 1;
 	};
-} VMX_EPT_VIOLATION_QUAILIFICATION;
+} PAGE_FAULT_ERROR_CODE;
 
 /*
 	All x86 general purpose registers + Xmm0-5 because they are volatile in Microsoft x64 Calling Convention
@@ -575,7 +547,23 @@ typedef struct {
 
 #define IA32_X2APIC_ICR 0x830
 
+///////////////////////////////////////////////
+////				Enums				   ////
+///////////////////////////////////////////////
 
+typedef enum {
+	ExceptionInterruptTypeDivideByZero = 0,
+	ExceptionInterruptTypeDebug = 1,
+	ExceptionInterruptTypeNMI = 2,
+	ExceptionInterruptTypeBreakpoint = 3,
+	ExceptionInterruptTypeInvalidOpcode = 6,
+	ExceptionInterruptTypeDeviceNotAvailable = 7,
+	ExceptionInterruptTypeDoubleFault = 8,
+	ExceptionInterruptTypeGeneralProtectionFault = 13,
+	ExceptionInterruptTypePageFault = 14,
+	ExceptionInterruptTypeMachineCheck = 18,
+	ExceptionInterruptTypeMaskableInterrupt = 32
+} ExceptionInterruptType;
 
 ///////////////////////////////////////////////
 ////				Methods				   ////

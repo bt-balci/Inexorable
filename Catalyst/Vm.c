@@ -132,6 +132,107 @@ DumpVmcs(
 }
 
 VOID
+EFIAPI
+InjectEvent(
+	IN UINT32					ErrorCode	OPTIONAL,
+	IN BOOLEAN					DeliverErrorCode,
+	IN ExceptionInterruptType	Vector,
+	IN VmxInterruptionType		Interruption,
+	IN BOOLEAN					Valid
+) {
+	VMX_INTERRUPTION_INFORMATION Event = {
+		.Valid = Valid,
+		.Type = Interruption,
+		.Vector = Vector,
+		.DeliverErrorCode = DeliverErrorCode
+	};
+
+	if (DeliverErrorCode)
+		__vmx_vmwrite(VMENTRY_EXCEPTION_ERR_CODE, ErrorCode);
+
+	__vmx_vmwrite(VMENTRY_INTERRUPTION_INFO_FIELD, Event.All);
+}
+
+BOOLEAN
+EFIAPI
+CopyFromGuest(
+	IN CR3      GuestCr3,
+	IN VOID* HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+) {
+	UINT8* Dst = (UINT8*)HostBuffer;
+	UINT64 SrcGva = GuestVirtualAddress;
+	UINTN BytesRemaining = Size;
+
+	while (BytesRemaining > 0) {
+		VOID* HostPointer = NULL;
+
+		if (!TranslateGuestAddressToHostAddress(GuestCr3, SrcGva, &HostPointer)) {
+			//
+			// Maybe inject pagefault.
+			//
+			return FALSE;
+		}
+
+		//
+		// Calculate how many bytes we can safely copy before hitting the next page boundary.
+		//
+		UINTN OffsetInPage = SrcGva & 0xFFF;
+		UINTN BytesToCopyThisPage = 4096 - OffsetInPage;
+		if (BytesToCopyThisPage > BytesRemaining) {
+			BytesToCopyThisPage = BytesRemaining;
+		}
+
+		CopyMem(Dst, HostPointer, BytesToCopyThisPage);
+
+		Dst += BytesToCopyThisPage;
+		SrcGva += BytesToCopyThisPage;
+		BytesRemaining -= BytesToCopyThisPage;
+	}
+
+	return TRUE;
+}
+
+BOOLEAN
+EFIAPI
+CopyToGuest(
+	IN CR3      GuestCr3,
+	IN VOID* HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+) {
+	UINT8* Source = (UINT8*)HostBuffer;
+	UINT64  Destination = GuestVirtualAddress;
+	UINTN   BytesRemaining = Size;
+
+	//
+	// There's arbitrary read/write exploit because I didn't check the page tables for permission bits.
+	// I can't be bothered. This is for a PoC.
+	//
+
+	while (BytesRemaining > 0) {
+		VOID* HostPointer = NULL;
+
+		if (!TranslateGuestAddressToHostAddress(GuestCr3, Destination, &HostPointer)) return FALSE;
+
+		UINTN Offset = Destination & 0xFFF;
+		UINTN BytesToCopy = 0x1000 - Offset;
+		if (BytesToCopy > BytesRemaining) {
+			BytesToCopy = BytesRemaining;
+		}
+
+		CopyMem(HostPointer, Source, BytesToCopy);
+
+		Destination += BytesToCopy;
+		Source += BytesToCopy;
+		BytesRemaining -= BytesToCopy;
+	}
+
+	return TRUE;
+}
+
+VOID
 VmExitHandler(
 
 ) {

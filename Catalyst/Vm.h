@@ -46,6 +46,24 @@ StartVm(
 	VOID
 );
 
+BOOLEAN
+EFIAPI
+CopyToGuest(
+	IN CR3      GuestCr3,
+	IN VOID*	HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+);
+
+BOOLEAN
+EFIAPI
+CopyFromGuest(
+	IN CR3      GuestCr3,
+	IN VOID*	HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+);
+
 ///////////////////////////////////////////////
 ////				Structs				   ////
 ///////////////////////////////////////////////
@@ -128,6 +146,45 @@ typedef struct {
 
 	} Firmware;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE;
+
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 Vector : 8;
+		UINT32 Type : 3;
+		UINT32 DeliverErrorCode : 1;
+		UINT32 Reserved : 19;
+		UINT32 Valid : 1;
+	};
+} VMX_INTERRUPTION_INFORMATION;
+
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 Present : 1;
+		UINT32 Write : 1;
+		UINT32 User : 1;
+		UINT32 ReservedBitSet : 1;
+		UINT32 NxViolation : 1;
+		UINT32 ProtectionKeyViolation : 1;
+		UINT32 Reserved : 26;
+	};
+} VMX_PAGE_FAULT_ERROR_CODE;
+
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 Read : 1;
+		UINT32 Write : 1;
+		UINT32 Execute : 1;
+		UINT32 IsReadable : 1;
+		UINT32 IsWritable : 1;
+		UINT32 IsExecutable : 1;
+		UINT32 UserExecute : 1;
+		UINT32 GuestLinearAddressValid : 1;
+		UINT32 TranslationBork : 1;
+	};
+} VMX_EPT_VIOLATION_QUAILIFICATION;
 
 ///////////////////////////////////////////////
 ////				Globals				   ////
@@ -228,6 +285,17 @@ typedef enum {
 	PinBasedVmxPreemptionTimer = 1 << 6,
 	PinBasedPostedInterrupts = 1 << 7,
 } VmxPinBasedControls;
+
+typedef enum {
+	InterruptionTypeExternalInterrupt = 0,
+	InterruptionTypeReserved = 1,
+	InterruptionTypeNonMaskableInterrupt = 2,
+	InterruptionTypeHardwareException = 3,
+	InterruptionTypeSoftwareInterrupt = 4,
+	InterruptionTypePrivilegedSoftwareException = 5,
+	InterruptionTypeSoftwareException = 6,
+	InterruptionTypeOther = 7
+} VmxInterruptionType;
 
 ///////////////////////////////////////////////
 ////				VMCS				   ////

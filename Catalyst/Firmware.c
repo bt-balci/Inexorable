@@ -1,4 +1,5 @@
 #include <Uefi.h>
+#include <Library/BaseLib.h>
 
 #include "Efi.h"
 #include "Memory.h"
