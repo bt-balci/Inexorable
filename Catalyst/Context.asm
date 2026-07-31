@@ -48,22 +48,22 @@ AsmVmExit proc
 	rdgsbase rax
 	add rax, 8192			; Skip Intel VM regions
 
-	mov rbx, [rax + 8]
-	mov rcx, [rax + 16]
-	mov rdx, [rax + 24]
-	mov rsi, [rax + 32]
-	mov rdi, [rax + 40]
+	mov rbx,	[rax + 8]
+	mov rcx,	[rax + 16]
+	mov rdx,	[rax + 24]
+	mov rsi,	[rax + 32]
+	mov rdi,	[rax + 40]
 
-	mov r8, [rax + 48]
-	mov r9, [rax + 56]
-	mov r10, [rax + 64]
-	mov r11, [rax + 72]
-	mov r12, [rax + 80]
-	mov r13, [rax + 88]
-	mov r14, [rax + 96]
-	mov r15, [rax + 104]
+	mov r8,		[rax + 48]
+	mov r9,		[rax + 56]
+	mov r10,	[rax + 64]
+	mov r11,	[rax + 72]
+	mov r12,	[rax + 80]
+	mov r13,	[rax + 88]
+	mov r14,	[rax + 96]
+	mov r15,	[rax + 104]
 
-	mov rbp, [rax + 112]
+	mov rbp,	[rax + 112]
 	
 	push [rax + 136]		; RFlags
 	popfq

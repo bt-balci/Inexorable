@@ -96,6 +96,14 @@ typedef struct {
 
 	struct {
 		__attribute__((aligned(4096))) CR3              IdentityCr3;
+
+		//
+		// Clang says its better padding this way.
+		//
+		UINT32 EpdptCount;
+		UINT32 EpdeCount;
+		UINT32 EpteCount;
+
 		__attribute__((aligned(4096))) PML4_1GB         IdentityPml4[512];
 		__attribute__((aligned(4096))) PDPE_1GB         IdentityPdpe[512];
 
@@ -104,10 +112,6 @@ typedef struct {
 		__attribute__((aligned(4096))) EPT_PDPTE        Epdpt[64][512];
 		__attribute__((aligned(4096))) EPT_LARGE_PDE    Epde[512][512];
 		__attribute__((aligned(4096))) EPT_PTE			Epte[16384][512];
-
-		UINT32 EpdptCount;
-		UINT32 EpdeCount;
-		UINT32 EpteCount;
 	} Memory;
 
 	struct {

@@ -220,11 +220,19 @@ VmExitHandler(
 
 	case VMEXIT_REASON_VMCALL:
 		DebugPrint0402("Guest made a hypervisor call. Function = 0x%p, Arg1 = 0x%p, "
-			"Arg2 = 0x%p, Arg3 = 0x%p, Arg4 = 0x%p\n",
+			"Arg2 = 0x%p, Arg3 = 0x%p, Arg4 = 0x%p, Arg5 = 0x%p, Arg6 = 0x%p\n",
 			Cpu->Context.Rax, Cpu->Context.Rcx, Cpu->Context.Rdx,
-			Cpu->Context.R8, Cpu->Context.R9);
+			Cpu->Context.R8, Cpu->Context.R9, Cpu->Context.R10, Cpu->Context.R11);
 
-		Cpu->Context.Rax = 1;
+		switch (Cpu->Context.Rax) {
+		case CATALYST_VMCALL_GET_VARIABLE:
+		case CATALYST_VMCALL_SET_VARIABLE:
+		case CATALYST_VMCALL_GET_NEXT_VARIABLE_NAME:
+		case CATALYST_VMCALL_QUERY_VARIABLE_INFO:
+		default:
+			Cpu->Context.Rax = EFI_NOT_FOUND;
+		}
+
 		//
 		// Fall through to advance RIP
 		//
