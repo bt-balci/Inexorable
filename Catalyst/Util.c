@@ -4,6 +4,8 @@
 #include <Library/IoLib.h>
 
 #include "x86.h"
+#include "Vm.h"
+#include "Memory.h"
 
 UINTN
 EFIAPI

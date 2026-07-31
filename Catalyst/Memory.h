@@ -26,6 +26,12 @@ MapPagesLinear(
 	IN OUT UINT64*  CurrentGuestPhysical
 );
 
+UINTN
+StrLenFromGuest(
+	IN CR3      GuestCr3,
+	IN UINT64   GuestAddress
+);
+
 BOOLEAN
 EFIAPI
 TranslateGuestPhysicalToHostPhysical(

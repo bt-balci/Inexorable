@@ -32,46 +32,6 @@
 #define CATALYST_VMCALL_RESET_SYSTEM				0x9
 
 ///////////////////////////////////////////////
-////				Methods				   ////
-///////////////////////////////////////////////
-
-VOID
-EFIAPI
-PrepareProcessor(
-	IN OUT VOID*	Argument
-);
-
-VOID
-EFIAPI
-AsmVmExit(
-	VOID
-);
-
-VOID
-EFIAPI
-StartVm(
-	VOID
-);
-
-BOOLEAN
-EFIAPI
-CopyToGuest(
-	IN CR3      GuestCr3,
-	IN VOID*	HostBuffer,
-	IN UINT64   GuestVirtualAddress,
-	IN UINTN    Size
-);
-
-BOOLEAN
-EFIAPI
-CopyFromGuest(
-	IN CR3      GuestCr3,
-	IN VOID*	HostBuffer,
-	IN UINT64   GuestVirtualAddress,
-	IN UINTN    Size
-);
-
-///////////////////////////////////////////////
 ////				Structs				   ////
 ///////////////////////////////////////////////
 
@@ -590,5 +550,55 @@ typedef enum {
 #define VMEXIT_REASON_PML_FULL 62
 #define VMEXIT_REASON_XSAVES 63
 #define VMEXIT_REASON_XRSTORS 64
+
+///////////////////////////////////////////////
+////				Methods				   ////
+///////////////////////////////////////////////
+
+VOID
+EFIAPI
+PrepareProcessor(
+	IN OUT VOID* Argument
+);
+
+VOID
+EFIAPI
+AsmVmExit(
+	VOID
+);
+
+VOID
+EFIAPI
+StartVm(
+	VOID
+);
+
+VOID
+EFIAPI
+InjectEvent(
+	IN UINT32					ErrorCode OPTIONAL,
+	IN BOOLEAN					DeliverErrorCode,
+	IN ExceptionInterruptType	Vector,
+	IN VmxInterruptionType		Interruption,
+	IN BOOLEAN					Valid
+);
+
+BOOLEAN
+EFIAPI
+CopyToGuest(
+	IN CR3      GuestCr3,
+	IN VOID* HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+);
+
+BOOLEAN
+EFIAPI
+CopyFromGuest(
+	IN CR3      GuestCr3,
+	IN VOID* HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+);
 
 #endif
