@@ -26,6 +26,30 @@ MapPagesLinear(
 	IN OUT UINT64*  CurrentGuestPhysical
 );
 
+BOOLEAN
+EFIAPI
+CopyToGuest(
+	IN CR3      GuestCr3,
+	IN VOID* HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+);
+
+BOOLEAN
+EFIAPI
+CopyFromGuest(
+	IN CR3      GuestCr3,
+	IN VOID* HostBuffer,
+	IN UINT64   GuestVirtualAddress,
+	IN UINTN    Size
+);
+
+UINTN
+StrSizeFromGuest(
+	IN CR3      GuestCr3,
+	IN UINT64   GuestAddress
+);
+
 UINTN
 StrLenFromGuest(
 	IN CR3      GuestCr3,

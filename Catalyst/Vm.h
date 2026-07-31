@@ -583,22 +583,4 @@ InjectEvent(
 	IN BOOLEAN					Valid
 );
 
-BOOLEAN
-EFIAPI
-CopyToGuest(
-	IN CR3      GuestCr3,
-	IN VOID* HostBuffer,
-	IN UINT64   GuestVirtualAddress,
-	IN UINTN    Size
-);
-
-BOOLEAN
-EFIAPI
-CopyFromGuest(
-	IN CR3      GuestCr3,
-	IN VOID* HostBuffer,
-	IN UINT64   GuestVirtualAddress,
-	IN UINTN    Size
-);
-
 #endif

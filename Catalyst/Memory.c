@@ -9,23 +9,61 @@
 #include "Vm.h"
 
 UINTN
+StrSizeFromGuest(
+	IN CR3      GuestCr3,
+	IN UINT64   GuestAddress
+) {
+	CONST UINT64 ChunkChars = 256;
+	CONST UINT64 ChunkBytes = ChunkChars * sizeof(CHAR16);
+	CONST UINT64 MaxReturn = (ChunkChars + 1) * 2;
+
+	UINT64 Source = GuestAddress;
+	CHAR16 Temp[256] = { 0 };
+
+	UINTN TotalLength = 0;
+	UINTN Length = MaxReturn;
+
+	while (Length == MaxReturn) {
+		if (!CopyFromGuest(GuestCr3, (VOID*)&Temp, Source, ChunkBytes)) {
+			return MAX_UINTN;
+		}
+
+		if (Length == MaxReturn) {
+			//
+			// Not null-terminated in this chunk. Add only the real characters, no phantom null terminator.
+			//
+			TotalLength += ChunkBytes;
+			Source += ChunkBytes;
+		}
+		else {
+			TotalLength += Length;   // Includes the real null terminator
+		}
+	}
+
+	return TotalLength;
+}
+
+UINTN
 StrLenFromGuest(
 	IN CR3      GuestCr3,
 	IN UINT64   GuestAddress
 ) {
-	UINT64 Souurce = GuestAddress;
+	CONST UINT64 ChunkChars = 256;
+	CONST UINT64 ChunkBytes = ChunkChars * sizeof(CHAR16);
+
+	UINT64 Source = GuestAddress;
 	CHAR16 Temp[256] = { 0 };
 
 	UINTN TotalLength = 0;
 	UINTN Length = 256;
 
 	while (Length == 256) {
-		if (!CopyFromGuest(GuestCr3, (VOID*)&Temp, Souurce, 256 * 2)) {
+		if (!CopyFromGuest(GuestCr3, (VOID*)&Temp, Source, ChunkBytes)) {
 			return MAX_UINTN;
 		}
 
 		Length = StrnLenS(Temp, 256);
-		Souurce += 256 * 2;
+		Source += 256;
 		TotalLength += Length;
 	}
 
@@ -40,14 +78,14 @@ CopyFromGuest(
 	IN UINT64   GuestVirtualAddress,
 	IN UINTN    Size
 ) {
-	UINT8* Dst = (UINT8*)HostBuffer;
-	UINT64 SrcGva = GuestVirtualAddress;
+	UINT8* Destination = (UINT8*)HostBuffer;
+	UINT64 Source = GuestVirtualAddress;
 	UINTN BytesRemaining = Size;
 
 	while (BytesRemaining > 0) {
 		VOID* HostPointer = NULL;
 
-		if (!TranslateGuestAddressToHostAddress(GuestCr3, SrcGva, &HostPointer)) {
+		if (!TranslateGuestAddressToHostAddress(GuestCr3, Source, &HostPointer)) {
 			//
 			// Maybe inject pagefault.
 			//
@@ -57,16 +95,16 @@ CopyFromGuest(
 		//
 		// Calculate how many bytes we can safely copy before hitting the next page boundary.
 		//
-		UINTN OffsetInPage = SrcGva & 0xFFF;
+		UINTN OffsetInPage = Source & 0xFFF;
 		UINTN BytesToCopyThisPage = 4096 - OffsetInPage;
 		if (BytesToCopyThisPage > BytesRemaining) {
 			BytesToCopyThisPage = BytesRemaining;
 		}
 
-		CopyMem(Dst, HostPointer, BytesToCopyThisPage);
+		CopyMem(Destination, HostPointer, BytesToCopyThisPage);
 
-		Dst += BytesToCopyThisPage;
-		SrcGva += BytesToCopyThisPage;
+		Destination += BytesToCopyThisPage;
+		Source += BytesToCopyThisPage;
 		BytesRemaining -= BytesToCopyThisPage;
 	}
 
