@@ -399,20 +399,11 @@ AdjustVmcsControl(
 	}
 	else if (Control == SECONDARY_PROCBASED_EXEC_CONTROLS) {
 		CapabilityMsr = IA32_VMX_PROCBASED_CTLS2;
-	} /*else if (Control == TERTIARY_PROCBASED_EXEC_CONTROLS) {
-		UINT64 Allowed1 = RzAsmReadMsr(IA32_VMX_PROCBASED_CTLS3);
-		UINT64 EffectiveValue = RequestedValue & Allowed1;
-
-		//ASSERT((EffectiveValue | RequestedValue) == EffectiveValue);
-
-		return EffectiveValue;
-	}*/
+	}
 
 	UINT64 Capabilities = __readmsr(CapabilityMsr);
 	UINT32 Allowed0 = (UINT32)Capabilities;
 	UINT32 Allowed1 = (UINT32)(Capabilities >> 32);
-
-	//ASSERT((EffectiveValue | RequestedValue) == EffectiveValue);
 
 	return (RequestedValue | Allowed0) & Allowed1;
 }
