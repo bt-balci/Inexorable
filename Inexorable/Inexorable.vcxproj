@@ -193,13 +193,19 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.c" />
+    <ClCompile Include="Misc.c" />
+    <ClCompile Include="Time.c" />
     <ClCompile Include="Variable.c" />
+    <ClCompile Include="VirtualMemory.c" />
     <ClCompile Include="x86.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h" />
+    <ClInclude Include="Misc.h" />
+    <ClInclude Include="Time.h" />
     <ClInclude Include="Util.h" />
     <ClInclude Include="Variable.h" />
+    <ClInclude Include="VirtualMemory.h" />
     <ClInclude Include="Vm.h" />
     <ClInclude Include="x86.h" />
   </ItemGroup>

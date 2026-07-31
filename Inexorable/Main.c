@@ -5,6 +5,9 @@
 #include "Efi.h"
 #include "Util.h"
 #include "Variable.h"
+#include "Time.h"
+#include "Misc.h"
+#include "VirtualMemory.h"
 
 EFI_SYSTEM_TABLE		gST = { 0 };
 EFI_BOOT_SERVICES	    gBS = { 0 };
@@ -13,18 +16,32 @@ EFI_RUNTIME_SERVICES	gRT = { 0 };
 VOID
 EFIAPI
 UefiMain(
-    VOID
+	VOID
 ) {
-    DebugPrint0402("Inexorable - As if it was always there. (It never was)\n");
+	DebugPrint0402("Inexorable - As if it was always there. (It never was)\n");
 
-    //
-    // Setup system table.
-    //
-    gST.BootServices        = &gBS;
-    gST.RuntimeServices     = &gRT;
+	//
+	// Setup system table.
+	//
+	gST.BootServices                = &gBS;
+	gST.RuntimeServices             = &gRT;
 
-    gRT.GetVariable         = IxGetVariable;
-    gRT.SetVariable         = IxSetVariable;
-    gRT.QueryVariableInfo   = IxQueryVariableInfo;
-    gRT.GetNextVariableName = IxGetNextVariableName;
+	//
+	// Setup runtime services.
+	//
+	gRT.GetVariable                 = IxGetVariable;
+	gRT.SetVariable                 = IxSetVariable;
+	gRT.QueryVariableInfo           = IxQueryVariableInfo;
+	gRT.GetNextVariableName         = IxGetNextVariableName;
+
+	gRT.SetTime                     = IxSetTime;
+	gRT.GetTime                     = IxGetTime;
+	gRT.GetWakeupTime               = IxGetWakeupTime;
+	gRT.SetWakeupTime               = IxSetWakeupTime;
+
+	gRT.GetNextHighMonotonicCount   = IxGetNextHighMonotonicCount;
+	gRT.ResetSystem                 = IxResetSystem;
+
+	gRT.SetVirtualAddressMap		= IxSetVirtualAddressMap;
+	gRT.ConvertPointer				= IxConvertPointer;
 }

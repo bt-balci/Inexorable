@@ -24,6 +24,15 @@
     <ClCompile Include="x86.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Time.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Misc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VirtualMemory.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h">
@@ -39,6 +48,15 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Variable.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Time.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Misc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VirtualMemory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
