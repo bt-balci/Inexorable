@@ -1,4 +1,6 @@
-#pragma once
+#ifndef _X86_H_
+#define _X86_H_
+
 #include <Uefi.h>
 
 ///////////////////////////////////////////////
@@ -13,9 +15,6 @@ inline VOID __outb(UINT16 port, UINT8 value) {
         );
 }
 
-__attribute__((naked)) inline UINT64 __vmx_vmcall(UINT64 function, UINT64 arg1, UINT64 arg2, UINT64 arg3, UINT64 arg4) {
-    __asm__ __volatile__(
-        "vmcall\n\t"
-        "ret"
-    );
-}
+__attribute__((naked)) UINT64 EFIAPI __vmx_vmcall(UINT64 function, UINT64 arg1, UINT64 arg2, UINT64 arg3, UINT64 arg4, UINT64 arg5, UINT64 arg6);
+
+#endif

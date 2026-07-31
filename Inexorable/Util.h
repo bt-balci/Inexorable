@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _UTIL_H_
+#define _UTIL_H_
 #include "x86.h"
 
 UINTN
@@ -26,3 +27,4 @@ DebugPrint0402(
 
     return CharCount;
 }
+#endif _UTIL_H_

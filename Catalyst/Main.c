@@ -104,20 +104,20 @@ PrepareProcessors(
 	// 1:1 map descriptor structures. Read the disclaimer at Main.c for the other screw up.
 	// Warning: This will INEVITABLY BREAK if the Catalyst is not mapped over the 4GB limit and guest has more than 4GB memory. 
 	//
-	g_GuestHostGdtBase = (VOID*)Descriptor.Base;
-	MapSinglePage((UINT64)g_GuestHostGdtBase, (UINT64)g_GuestHostGdtBase, FALSE);
+	VmState.SharedState.GdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)VmState.SharedState.GdtBase, (UINT64)VmState.SharedState.GdtBase, FALSE);
 
-	g_GuestHostTssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
-	MapSinglePage((UINT64)g_GuestHostTssBase, (UINT64)g_GuestHostTssBase, FALSE);
+	VmState.SharedState.TssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
+	MapSinglePage((UINT64)VmState.SharedState.TssBase, (UINT64)VmState.SharedState.TssBase, FALSE);
 
 	AsmReadIdtr(&Descriptor);
 
-	g_GuestHostIdtBase = (VOID*)Descriptor.Base;
-	MapSinglePage((UINT64)g_GuestHostIdtBase, (UINT64)g_GuestHostIdtBase, FALSE);
+	VmState.SharedState.IdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)VmState.SharedState.IdtBase, (UINT64)VmState.SharedState.IdtBase, FALSE);
 
-	g_GuestHostTrSelector		= AsmReadTr();
-	g_GuestHostTrAccessRights	= AsmLoadSegmentAccessRights(g_GuestHostTrSelector);
-	g_GuestHostTrLimit			= AsmLoadSegmentLimit(g_GuestHostTrSelector);
+	VmState.SharedState.TrSelector		= AsmReadTr();
+	VmState.SharedState.TrAccessRights	= AsmLoadSegmentAccessRights(VmState.SharedState.TrSelector);
+	VmState.SharedState.TrLimit			= AsmLoadSegmentLimit(VmState.SharedState.TrSelector);
 
 	//
 	// Set the interrupt handler for sexy APIC shenanigans.
@@ -198,6 +198,12 @@ LoadFirmware(
 
 	EFI_IMAGE_OPTIONAL_HEADER64* OptionalHeader = &NtHeaders->OptionalHeader;
 
+	//
+	// Virgins relocate images.
+	// Chads put them whereever they want to be.
+	// Haters will talk about ASLR.
+	// Chad will just virtualize address space via EPTs.
+	//
 	if (OptionalHeader->ImageBase != FIRMWARE_IMAGE_BASE) {
 		DebugPrint0402("The firmware preferred ImageBase must be exactly 0x%p.\n", FIRMWARE_IMAGE_BASE);
 		return EFI_UNSUPPORTED;
@@ -319,18 +325,18 @@ MapMemory(
 	//
 	// Initialize globals.
 	//
-	g_Eptp.DirtyAndAccessEnabled = FALSE;
-	g_Eptp.PageWalkLength = 3;
-	g_Eptp.MemoryType = 6;
-	g_Eptp.Pml4Address = ((UINT64)&g_Epml4) >> 12;
+	VmState.Memory.Eptp.DirtyAndAccessEnabled = FALSE;
+	VmState.Memory.Eptp.PageWalkLength = 3;
+	VmState.Memory.Eptp.MemoryType = 6;
+	VmState.Memory.Eptp.Pml4Address = ((UINT64)&VmState.Memory.Epml4) >> 12;
 
-	DebugPrint0402("g_Eptp = 0x%p\n", g_Eptp.All);
+	DebugPrint0402("g_Eptp = 0x%p\n", VmState.Memory.Eptp.All);
 
-	g_IdentityCr3.PhysicalAddress = ((UINT64)&g_IdentityPml4[0]) >> 12;
+	VmState.Memory.IdentityCr3.PhysicalAddress = ((UINT64)&VmState.Memory.IdentityPml4[0]) >> 12;
 
-	g_IdentityPml4[0].Present = TRUE;
-	g_IdentityPml4[0].Write = TRUE;
-	g_IdentityPml4[0].PhysicalAddress = ((UINT64)&g_IdentityPdpe[0]) >> 12;
+	VmState.Memory.IdentityPml4[0].Present = TRUE;
+	VmState.Memory.IdentityPml4[0].Write = TRUE;
+	VmState.Memory.IdentityPml4[0].PhysicalAddress = ((UINT64)&VmState.Memory.IdentityPdpe[0]) >> 12;
 
 	//
 	// Why not map the first 4GB only?
@@ -340,13 +346,13 @@ MapMemory(
 	// This might screw me over, but okay.
 	//
 	for (UINTN i = 0; i < 512; i++) {
-		g_IdentityPdpe[i].Present = TRUE;
-		g_IdentityPdpe[i].Large = TRUE;
-		g_IdentityPdpe[i].Write = TRUE;
-		g_IdentityPdpe[i].PhysicalAddress = i;
+		VmState.Memory.IdentityPdpe[i].Present = TRUE;
+		VmState.Memory.IdentityPdpe[i].Large = TRUE;
+		VmState.Memory.IdentityPdpe[i].Write = TRUE;
+		VmState.Memory.IdentityPdpe[i].PhysicalAddress = i;
 	}
 
-	DebugPrint0402("g_IdentityCr3 = 0x%p\n",	g_IdentityCr3.All);
+	DebugPrint0402("g_IdentityCr3 = 0x%p\n", VmState.Memory.IdentityCr3.All);
 
 	DebugPrint0402("Mapping out free memory...\n");
 
@@ -388,10 +394,10 @@ MapMemory(
 	// into the EPT. We will identity map them (GPA == HPA) so we can safely
 	// pass their HPA directly to GUEST_CR3. (200 IQ, for now. Considering that we are above the 4GB but I can't be bothered.)
 	//
-	UINT64 Pml4Hpa = (UINT64)&g_IdentityPml4[0];
+	UINT64 Pml4Hpa = (UINT64)&VmState.Memory.IdentityPml4[0];
 	MapSinglePage(Pml4Hpa, Pml4Hpa, FALSE);
 
-	UINT64 PdpeHpa = (UINT64)&g_IdentityPdpe[0];
+	UINT64 PdpeHpa = (UINT64)&VmState.Memory.IdentityPdpe[0];
 	//
 	// Identity map the PDPEs. Gently...
 	//

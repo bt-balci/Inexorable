@@ -5,27 +5,23 @@
 #include "x86.h"
 
 ///////////////////////////////////////////////
-////				Globals				   ////
-///////////////////////////////////////////////
-
-__attribute__((aligned(4096))) extern X86_IDT_ENTRY	g_GuestHostIdt[256];
-__attribute__((aligned(4096))) extern X86_GDT_ENTRY	g_GuestHostGdt[8192];
-__attribute__((aligned(4096))) extern UINT8			g_GuestHostTss[104];
-
-extern VOID* g_GuestHostIdtBase;
-extern VOID* g_GuestHostGdtBase;
-extern VOID* g_GuestHostTssBase;
-
-extern UINT16 g_GuestHostTrSelector;
-extern UINT16 g_GuestHostTrAccessRights;
-extern UINT16 g_GuestHostTrLimit;
-
-///////////////////////////////////////////////
 ////			  Definitions			   ////
 ///////////////////////////////////////////////
 
 #define FIRMWARE_IMAGE_BASE		0x1000
+// In page counts. (E.g. 4 = 0x4000 bytes)
 #define BSP_INITIAL_STACK_SIZE	4
+#define HOST_STACK_SIZE			0x4000
+
+///////////////////////////////////////////////
+////				VMCALLs 			   ////
+///////////////////////////////////////////////
+
+#define CATALYST_VMCALL_SET_VARIABLE			0x0
+#define CATALYST_VMCALL_GET_VARIABLE			0x1
+#define CATALYST_VMCALL_QUERY_VARIABLE_INFO		0x2
+#define CATALYST_VMCALL_GET_NEXT_VARIABLE_NAME	0x3
+
 
 ///////////////////////////////////////////////
 ////				Methods				   ////
@@ -66,11 +62,69 @@ typedef struct {
 
 	struct {
 		UINT8 MsrBitmap[0x1000];
-		UINT8 HostStack[0x1000];
+		UINT8 HostStack[HOST_STACK_SIZE];
 	} __attribute__((aligned(4096))) Data;
 
 	UINT32 Index;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_CPU;
+
+typedef struct {
+	//
+	// Pray it works.
+	//
+	CHAR16 VariableName[256];
+	EFI_GUID VendorGuid;
+	UINT32 Attributes;
+	UINTN DataSize;
+	VOID* Data;
+} NVRAM_NODE;
+
+typedef struct {
+	struct {
+		__attribute__((aligned(4096))) X86_IDT_ENTRY	Idt[256];
+		__attribute__((aligned(4096))) X86_GDT_ENTRY	Gdt[8192];
+		__attribute__((aligned(4096))) UINT8			Tss[104];
+
+		VOID* IdtBase;
+		VOID* GdtBase;
+		VOID* TssBase;
+
+		UINT16 TrSelector;
+		UINT16 TrAccessRights;
+		UINT16 TrLimit;
+	} SharedState;
+
+	struct {
+		__attribute__((aligned(4096))) CR3              IdentityCr3;
+		__attribute__((aligned(4096))) PML4_1GB         IdentityPml4[512];
+		__attribute__((aligned(4096))) PDPE_1GB         IdentityPdpe[512];
+
+		__attribute__((aligned(4096))) EPTP				Eptp;
+		__attribute__((aligned(4096))) EPT_PML4			Epml4[512];
+		__attribute__((aligned(4096))) EPT_PDPTE        Epdpt[64][512];
+		__attribute__((aligned(4096))) EPT_LARGE_PDE    Epde[512][512];
+		__attribute__((aligned(4096))) EPT_PTE			Epte[16384][512];
+
+		UINT32 EpdptCount;
+		UINT32 EpdeCount;
+		UINT32 EpteCount;
+	} Memory;
+
+	struct {
+		struct {
+			NVRAM_NODE* Variables;
+			UINTN VariablesLength;
+		} Variables;
+
+
+	} Firmware;
+} __attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE;
+
+///////////////////////////////////////////////
+////				Globals				   ////
+///////////////////////////////////////////////
+
+__attribute__((aligned(4096))) extern CATALYST_VIRTUAL_MACHINE VmState;
 
 ///////////////////////////////////////////////
 ////				Enums				   ////

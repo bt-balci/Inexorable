@@ -5,20 +5,6 @@
 #include "x86.h"
 #include "Vm.h"
 
-__attribute__((aligned(4096))) CR3              g_IdentityCr3;
-__attribute__((aligned(4096))) PML4_1GB         g_IdentityPml4[512];
-__attribute__((aligned(4096))) PDPE_1GB         g_IdentityPdpe[512];
-
-__attribute__((aligned(4096))) EPTP				g_Eptp;
-__attribute__((aligned(4096))) EPT_PML4			g_Epml4[512];
-__attribute__((aligned(4096))) EPT_PDPTE        g_Epdpt[64][512];
-__attribute__((aligned(4096))) EPT_LARGE_PDE    g_Epde[512][512];
-__attribute__((aligned(4096))) EPT_PTE			g_Epte[16384][512];
-
-UINT32 g_EpdptCount    = 0;
-UINT32 g_EpdeCount     = 0;
-UINT32 g_EpteCount     = 0;
-
 /*
     Maybe this shouuld return a BOOLEAN?
 */
@@ -33,7 +19,7 @@ TranslateGuestToHostAddress(
     UINT16 PtIdx    = (GuestPhysicalAddress >> 12) & 0x1FF;
     UINT16 Offset   = (GuestPhysicalAddress) & 0xFFF;
 
-    EPT_PML4* Epml4 = &g_Epml4[Pml4Idx];
+    EPT_PML4* Epml4 = &VmState.Memory.Epml4[Pml4Idx];
     //DebugPrint0402("Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
     if (!Epml4->Present)
         return NULL;
@@ -82,20 +68,20 @@ MapSinglePage(
     //
     // PML4 Level
     //
-    EPT_PML4* Epml4 = &g_Epml4[Pml4Idx];
+    EPT_PML4* Epml4 = &VmState.Memory.Epml4[Pml4Idx];
     if (!Epml4->Present) {
         Epml4->Execute = TRUE;
         Epml4->Write = TRUE;
         Epml4->Read = TRUE;
         Epml4->ExecuteUser = TRUE;
 
-        if (g_EpdptCount >= 64) {
+        if (VmState.Memory.EpdptCount >= 64) {
             DebugPrint0402("g_EpdptCount is bigger than 64. Borked\n");
             return FALSE;
         }
-        UINT32 PdptPoolIndex = g_EpdptCount++;
+        UINT32 PdptPoolIndex = VmState.Memory.EpdptCount++;
 
-        Epml4->PhysicalAddress = ((UINT64)&g_Epdpt[PdptPoolIndex][0]) >> 12;
+        Epml4->PhysicalAddress = ((UINT64)&VmState.Memory.Epdpt[PdptPoolIndex][0]) >> 12;
         Epml4->Present = TRUE;
 
         //DebugPrint0402("EPT_PML4 = 0x%p at 0x%p\n", Epml4->All, Epml4);
@@ -112,13 +98,13 @@ MapSinglePage(
         Pdpt->Read = TRUE;
         Pdpt->ExecuteUser = TRUE;
 
-        if (g_EpdeCount >= 512) {
+        if (VmState.Memory.EpdeCount >= 512) {
             DebugPrint0402("g_EpdeCount is bigger than 512. Borked\n");
             return FALSE;
         }
-        UINT32 PdPoolIndex = g_EpdeCount++;
+        UINT32 PdPoolIndex = VmState.Memory.EpdeCount++;
 
-        Pdpt->PhysicalAddress = ((UINT64)&g_Epde[PdPoolIndex][0]) >> 12;
+        Pdpt->PhysicalAddress = ((UINT64)&VmState.Memory.Epde[PdPoolIndex][0]) >> 12;
         Pdpt->Present = TRUE;
         //DebugPrint0402("EPT_PDPTE = 0x%p at %p\n", Pdpt->All, Pdpt);
     }
@@ -166,14 +152,14 @@ MapSinglePage(
         //
         // Hmm. Can we get borked? Better log than hang.
         //
-        if (g_EpteCount >= 16384) {
+        if (VmState.Memory.EpteCount >= 16384) {
             DebugPrint0402("g_EpteCount is bigger than 16384. Borked\n");
             return FALSE;
         }
 
-        UINT32 PtPoolIndex = g_EpteCount++;
+        UINT32 PtPoolIndex = VmState.Memory.EpteCount++;
 
-        NonLargePd->PhysicalAddress = ((UINT64)&g_Epte[PtPoolIndex][0]) >> 12;
+        NonLargePd->PhysicalAddress = ((UINT64)&VmState.Memory.Epte[PtPoolIndex][0]) >> 12;
         NonLargePd->Present = TRUE;
 
         //DebugPrint0402("EPT_PDE = 0x%p at %p. EPTE count = %d\n", NonLargePd->All, NonLargePd, g_EpteCount);

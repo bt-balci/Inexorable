@@ -9,15 +9,7 @@
 #include "Efi.h"
 #include "Memory.h"
 
-__attribute__((aligned(4096))) X86_GDT_ENTRY	g_GuestHostGdt[8192];
-
-VOID* g_GuestHostIdtBase;
-VOID* g_GuestHostGdtBase;
-VOID* g_GuestHostTssBase;
-
-UINT16 g_GuestHostTrSelector;
-UINT16 g_GuestHostTrAccessRights;
-UINT16 g_GuestHostTrLimit;
+__attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE VmState = { 0 };
 
 STATIC
 VOID
@@ -141,83 +133,122 @@ DumpVmcs(
 
 VOID
 VmExitHandler(
-	
+
 ) {
 	//
-	// Get arguments.
+	// Retrieve per-CPU structure via GS base.
 	//
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)_readgsbase_u64();
 
-	UINT64 ExitQualification	= 0;
-	UINT64 ExitReason			= 0;
-	UINT64 ExitInstructionLen	= 0;
+	UINT64 ExitQualification = 0;
+	UINT64 ExitReason = 0;
+	UINT64 ExitInstructionLen = 0;
 
-	__vmx_vmread(READONLY_EXIT_QUALIFICATION,		&ExitQualification);
-	__vmx_vmread(READONLY_EXIT_REASON,				&ExitReason);
-	__vmx_vmread(READONLY_VMEXIT_INSTRUCTION_LEN,	&ExitInstructionLen);
+	__vmx_vmread(READONLY_EXIT_QUALIFICATION, &ExitQualification);
+	__vmx_vmread(READONLY_EXIT_REASON, &ExitReason);
+	__vmx_vmread(READONLY_VMEXIT_INSTRUCTION_LEN, &ExitInstructionLen);
 
-	__vmx_vmread(GUEST_RIP,	&Cpu->Context.Rip);
-	__vmx_vmread(GUEST_RSP,	&Cpu->Context.Rsp);
+	__vmx_vmread(GUEST_RIP, &Cpu->Context.Rip);
+	__vmx_vmread(GUEST_RSP, &Cpu->Context.Rsp);
 
 	//
-	// Get basic exit reason.
+	// Only the lower 16 bits contain the basic exit reason.
 	//
 	ExitReason &= 0xFFFF;
 
 	DebugPrint0402("VMEXIT[%d]: Reason = %d, Qualification = 0x%p, ExitInstructionLen = %d, GuestRip = 0x%p, GuestRsp = 0x%p\n",
-		Cpu->Index, ExitReason, ExitQualification, ExitInstructionLen, Cpu->Context.Rip, Cpu->Context.Rsp);
+		Cpu->Index, ExitReason, ExitQualification, ExitInstructionLen,
+		Cpu->Context.Rip, Cpu->Context.Rsp);
 
-	if (ExitReason == VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE) {
+	BOOLEAN Borked = FALSE;
+
+	switch (ExitReason) {
+
+	case VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE:
 		DebugPrint0402("VMCS is borked\n");
-		goto Bork;
-	}
-	else if (ExitReason == VMEXIT_REASON_TRIPLE_FAULT) {
+		Borked = TRUE;
+		break;
+
+	case VMEXIT_REASON_TRIPLE_FAULT:
 		DebugPrint0402("Guest triple-faulted\n");
-		goto Bork;
-	}
-	else if (ExitReason == VMEXIT_REASON_EXCEPTION_OR_NMI) {
+		Borked = TRUE;
+		break;
+
+	case VMEXIT_REASON_EXCEPTION_OR_NMI: {
 		VMX_INTERRUPTION_INFORMATION InterruptionInfo = { 0 };
 		__vmx_vmread(READONLY_VMEXIT_INTERRUPTION_INFO, (UINT64*)&InterruptionInfo.All);
-		DebugPrint0402("Guest exception occured. Vector = %d, Type = %d, Deliver = %d, Valid = %d\n",
-			InterruptionInfo.Vector, InterruptionInfo.Type, InterruptionInfo.DeliverErrorCode, InterruptionInfo.Valid);
 
+		DebugPrint0402("Guest exception occured. Vector = %d, Type = %d, Deliver = %d, Valid = %d\n",
+			InterruptionInfo.Vector, InterruptionInfo.Type,
+			InterruptionInfo.DeliverErrorCode, InterruptionInfo.Valid);
+
+		//
+		// Page fault.
+		//
 		if (InterruptionInfo.Vector == 14) {
 			VMX_PAGE_FAULT_ERROR_CODE PageFaultErrorCode = { 0 };
 			__vmx_vmread(PAGE_FAULT_ERR_CODE_MASK, (UINT64*)&PageFaultErrorCode.All);
 
-			DebugPrint0402("Page Fault occured. Present = %d, Write = %d, User = %d, ReservedBitSet = %d, NxViolation = %d, ProtectionKeyInvalid = %d\n",
-				PageFaultErrorCode.Present, PageFaultErrorCode.Write, PageFaultErrorCode.User,
-				PageFaultErrorCode.ReservedBitSet, PageFaultErrorCode.NxViolation, PageFaultErrorCode.ProtectionKeyViolation);
-
-			goto Bork;
+			DebugPrint0402("Page Fault occured. Present = %d, Write = %d, User = %d, "
+				"ReservedBitSet = %d, NxViolation = %d, ProtectionKeyInvalid = %d\n",
+				PageFaultErrorCode.Present, PageFaultErrorCode.Write,
+				PageFaultErrorCode.User, PageFaultErrorCode.ReservedBitSet,
+				PageFaultErrorCode.NxViolation, PageFaultErrorCode.ProtectionKeyViolation);
 		}
-	}
-	else if (ExitReason == VMEXIT_REASON_EPT_VIOLATION) {
-		VMX_EPT_VIOLATION_QUAILIFICATION EptQualification = { .All = (UINT32)ExitQualification };
-		DebugPrint0402("EPT Violation. Read = %d, Write = %d, Execute = %d, IsReadable = %d, IsWritable = %d, IsExecutable = %d, UserExecute = %d, GuestLinearAddressValid = %d, TranslationBork = %d\n",
-			EptQualification.Read, EptQualification.Write, EptQualification.Execute, EptQualification.IsReadable, EptQualification.IsWritable, EptQualification.IsExecutable,
-			EptQualification.UserExecute, EptQualification.GuestLinearAddressValid, EptQualification.TranslationBork);
 
-		goto Bork;
+		//
+		// For now, all exceptions are considered fatal.
+		//
+		Borked = TRUE;
+		break;
 	}
-	else if (ExitReason == VMEXIT_REASON_VMCALL) {
-		DebugPrint0402("Guest made a hypervisor call. Function = 0x%p, Arg1 = 0x%p, Arg2 = 0x%p, Arg3 = 0x%p, Arg4 = 0x%p\n",
-			Cpu->Context.Rax, Cpu->Context.Rcx, Cpu->Context.Rdx, Cpu->Context.R8, Cpu->Context.R9);
+
+	case VMEXIT_REASON_EPT_VIOLATION: {
+		VMX_EPT_VIOLATION_QUAILIFICATION EptQual = { .All = (UINT32)ExitQualification };
+
+		DebugPrint0402("EPT Violation. Read = %d, Write = %d, Execute = %d, "
+			"IsReadable = %d, IsWritable = %d, IsExecutable = %d, "
+			"UserExecute = %d, GuestLinearAddressValid = %d, TranslationBork = %d\n",
+			EptQual.Read, EptQual.Write, EptQual.Execute,
+			EptQual.IsReadable, EptQual.IsWritable, EptQual.IsExecutable,
+			EptQual.UserExecute, EptQual.GuestLinearAddressValid,
+			EptQual.TranslationBork);
+
+		Borked = TRUE;
+		break;
+	}
+
+	case VMEXIT_REASON_VMCALL:
+		DebugPrint0402("Guest made a hypervisor call. Function = 0x%p, Arg1 = 0x%p, "
+			"Arg2 = 0x%p, Arg3 = 0x%p, Arg4 = 0x%p\n",
+			Cpu->Context.Rax, Cpu->Context.Rcx, Cpu->Context.Rdx,
+			Cpu->Context.R8, Cpu->Context.R9);
+
 		Cpu->Context.Rax = 1;
+		//
+		// Fall through to advance RIP
+		//
+		break;
+
+	default:
+		//
+		// Unknown exit reason. Fatal.
+		//
+		Borked = TRUE;
+		//
+		break;
 	}
 
-	//
-	// Advance Guest RIP.
-	//
-	__vmx_vmwrite(GUEST_RIP, Cpu->Context.Rip + ExitInstructionLen);
-
-	goto End;
-
-Bork:
-	DumpVmcs();
-	__asm__ __volatile__("hlt");
-End:
-	return;
+	if (Borked) {
+		DumpVmcs();
+		__asm__ __volatile__ ("hlt");
+	}
+	else {
+		//
+		// Advance the guest RIP.
+		//
+		__vmx_vmwrite(GUEST_RIP, Cpu->Context.Rip + ExitInstructionLen);
+	}
 }
 
 STATIC
@@ -266,9 +297,9 @@ AdjustVmcsControl(
 		return EffectiveValue;
 	}*/
 
-	UINT64 Capabilities	= __readmsr(CapabilityMsr);
-	UINT32 Allowed0		= (UINT32)Capabilities;
-	UINT32 Allowed1		= (UINT32)(Capabilities >> 32);
+	UINT64 Capabilities = __readmsr(CapabilityMsr);
+	UINT32 Allowed0 = (UINT32)Capabilities;
+	UINT32 Allowed1 = (UINT32)(Capabilities >> 32);
 
 	//ASSERT((EffectiveValue | RequestedValue) == EffectiveValue);
 
@@ -308,7 +339,7 @@ SetupVmcs(
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
 
-	__vmx_vmwrite(EPTP_FULL, g_Eptp.All);
+	__vmx_vmwrite(EPTP_FULL, VmState.Memory.Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
 	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT64);
 
@@ -321,21 +352,21 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_DS_SELECTOR, AsmReadDs());
 	__vmx_vmwrite(HOST_FS_SELECTOR, AsmReadFs());
 	__vmx_vmwrite(HOST_GS_SELECTOR, AsmReadGs());
-	__vmx_vmwrite(HOST_TR_SELECTOR, g_GuestHostTrSelector);
+	__vmx_vmwrite(HOST_TR_SELECTOR, VmState.SharedState.TrSelector);
 
 	__vmx_vmwrite(HOST_CR0, __readcr0());
 	//
 	// Because for some reason, original identity page tables stay in EfiConventionalMemory. Which EPT mapping overwrites... Bruh
 	//
-	__vmx_vmwrite(HOST_CR3, g_IdentityCr3.All);
+	__vmx_vmwrite(HOST_CR3, VmState.Memory.IdentityCr3.All);
 	__vmx_vmwrite(HOST_CR4, __readcr4());
 
 	__vmx_vmwrite(HOST_FS_BASE, 0);
 	__vmx_vmwrite(HOST_GS_BASE, (UINT64)Cpu);
 
-	__vmx_vmwrite(HOST_TR_BASE, (UINT64)g_GuestHostTssBase);
-	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)g_GuestHostGdtBase);
-	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)g_GuestHostIdtBase);
+	__vmx_vmwrite(HOST_TR_BASE, (UINT64)VmState.SharedState.TssBase);
+	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)VmState.SharedState.GdtBase);
+	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)VmState.SharedState.IdtBase);
 
 	__vmx_vmwrite(HOST_RIP, (UINT64)AsmVmExit);
 	__vmx_vmwrite(HOST_RSP, (UINT64)&Cpu->Data.HostStack);
@@ -348,7 +379,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_DS_SELECTOR, AsmReadDs());
 	__vmx_vmwrite(GUEST_LDTR_SELECTOR, AsmReadLdtr());
 
-	__vmx_vmwrite(GUEST_TR_SELECTOR, g_GuestHostTrSelector);
+	__vmx_vmwrite(GUEST_TR_SELECTOR, VmState.SharedState.TrSelector);
 	__vmx_vmwrite(GUEST_FS_SELECTOR, AsmReadFs());
 	__vmx_vmwrite(GUEST_GS_SELECTOR, AsmReadGs());
 	__vmx_vmwrite(GUEST_CS_SELECTOR, AsmReadCs());
@@ -360,7 +391,7 @@ SetupVmcs(
 
 	__vmx_vmwrite(GUEST_FS_LIMIT, AsmLoadSegmentLimit(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_LIMIT, AsmLoadSegmentLimit(AsmReadGs()));
-	__vmx_vmwrite(GUEST_TR_LIMIT, g_GuestHostTrLimit);
+	__vmx_vmwrite(GUEST_TR_LIMIT, VmState.SharedState.TrLimit);
 
 	__vmx_vmwrite(GUEST_ES_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadEs()));
 	__vmx_vmwrite(GUEST_CS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadCs()));
@@ -368,7 +399,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_DS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadDs()));
 	__vmx_vmwrite(GUEST_FS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadGs()));
-	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, g_GuestHostTrAccessRights);
+	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, VmState.SharedState.TrAccessRights);
 	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(0));
 
 	__vmx_vmwrite(GUEST_FS_BASE, (UINT64)Cpu);
@@ -377,27 +408,27 @@ SetupVmcs(
 	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadIdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)g_GuestHostIdtBase);
+	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)VmState.SharedState.IdtBase);
 	__vmx_vmwrite(GUEST_IDTR_LIMIT, Descriptor.Limit);
 
 	AsmReadGdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)g_GuestHostGdt);
+	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)VmState.SharedState.Gdt);
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
 
-	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)g_GuestHostGdtBase);
+	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)VmState.SharedState.GdtBase);
 
 	//
 	// Intel's propaganda to force everyone to use sysenter again.
 	//
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS,	__readmsr(IA32_SYSENTER_CS));
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP,	__readmsr(IA32_SYSENTER_EIP));
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP,	__readmsr(IA32_SYSENTER_ESP));
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS, __readmsr(IA32_SYSENTER_CS));
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP, __readmsr(IA32_SYSENTER_EIP));
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP, __readmsr(IA32_SYSENTER_ESP));
 
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, MAX_UINT64);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
-	__vmx_vmwrite(GUEST_CR3, g_IdentityCr3.All);
+	__vmx_vmwrite(GUEST_CR3, VmState.Memory.IdentityCr3.All);
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());
@@ -411,7 +442,7 @@ SetupVmcs(
 VOID
 EFIAPI
 PrepareProcessor(
-	IN OUT VOID*	Argument
+	IN OUT VOID* Argument
 ) {
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)Argument;
 
@@ -437,14 +468,14 @@ PrepareProcessor(
 	//
 	// Read required bitmask values for Cr0 and Cr4.
 	//
-	UINT64 Cr0OrMask	= __readmsr(IA32_VMX_CR0_FIXED0);
-	UINT64 Cr0AndMask	= __readmsr(IA32_VMX_CR0_FIXED1);
+	UINT64 Cr0OrMask = __readmsr(IA32_VMX_CR0_FIXED0);
+	UINT64 Cr0AndMask = __readmsr(IA32_VMX_CR0_FIXED1);
 
 	DebugPrint0402("CR0_FIXED0 = %p\n", Cr0OrMask);
 	DebugPrint0402("CR0_FIXED1 = %p\n", Cr0AndMask);
 
-	UINT64 Cr4OrMask	= __readmsr(IA32_VMX_CR4_FIXED0);
-	UINT64 Cr4AndMask	= __readmsr(IA32_VMX_CR4_FIXED1);
+	UINT64 Cr4OrMask = __readmsr(IA32_VMX_CR4_FIXED0);
+	UINT64 Cr4AndMask = __readmsr(IA32_VMX_CR4_FIXED1);
 
 	DebugPrint0402("CR4_FIXED0 = %p\n", Cr4OrMask);
 	DebugPrint0402("CR4_FIXED1 = %p\n", Cr4AndMask);
@@ -485,11 +516,11 @@ PrepareProcessor(
 	//
 	// Set revision field of each VMX structure.
 	//
-	Cpu->Vmx.Vmcs.RevisionIdentifier	= Revision;
-	Cpu->Vmx.VmxOn.RevisionIdentifier	= Revision;
+	Cpu->Vmx.Vmcs.RevisionIdentifier = Revision;
+	Cpu->Vmx.VmxOn.RevisionIdentifier = Revision;
 
-	DebugPrint0402("VMXON = %p\n",	&Cpu->Vmx.VmxOn);
-	DebugPrint0402("VMCS = %p\n",	&Cpu->Vmx.Vmcs);
+	DebugPrint0402("VMXON = %p\n", &Cpu->Vmx.VmxOn);
+	DebugPrint0402("VMCS = %p\n", &Cpu->Vmx.Vmcs);
 
 	//
 	// Set VMXON region.

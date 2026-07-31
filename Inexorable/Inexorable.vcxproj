@@ -192,10 +192,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.c" />
+    <ClCompile Include="Variable.c" />
+    <ClCompile Include="x86.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h" />
     <ClInclude Include="Util.h" />
+    <ClInclude Include="Variable.h" />
+    <ClInclude Include="Vm.h" />
     <ClInclude Include="x86.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

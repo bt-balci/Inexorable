@@ -77,7 +77,7 @@ AsmVmExit proc
 
 	mov rax, [rax]
 
-	vmresume
+	vmresume				; What happened? Where did these 3000 cycles come from? Mehhh.. Whatever.
 
 AsmVmExit endp
 
