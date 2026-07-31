@@ -9,7 +9,7 @@
 #include "Efi.h"
 #include "Memory.h"
 
-__attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE VmState = { 0 };
+__attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE g_VmState = { 0 };
 
 STATIC
 VOID
@@ -150,6 +150,8 @@ VmExitHandler(
 
 	__vmx_vmread(GUEST_RIP, &Cpu->Context.Rip);
 	__vmx_vmread(GUEST_RSP, &Cpu->Context.Rsp);
+
+	__vmx_vmread(GUEST_CR3, &Cpu->ExtendedContext.Cr3.All);
 
 	//
 	// Only the lower 16 bits contain the basic exit reason.
@@ -347,7 +349,7 @@ SetupVmcs(
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
 
-	__vmx_vmwrite(EPTP_FULL, VmState.Memory.Eptp.All);
+	__vmx_vmwrite(EPTP_FULL, g_VmState.Memory.Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
 	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT64);
 
@@ -360,21 +362,21 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_DS_SELECTOR, AsmReadDs());
 	__vmx_vmwrite(HOST_FS_SELECTOR, AsmReadFs());
 	__vmx_vmwrite(HOST_GS_SELECTOR, AsmReadGs());
-	__vmx_vmwrite(HOST_TR_SELECTOR, VmState.SharedState.TrSelector);
+	__vmx_vmwrite(HOST_TR_SELECTOR, g_VmState.SharedState.TrSelector);
 
 	__vmx_vmwrite(HOST_CR0, __readcr0());
 	//
 	// Because for some reason, original identity page tables stay in EfiConventionalMemory. Which EPT mapping overwrites... Bruh
 	//
-	__vmx_vmwrite(HOST_CR3, VmState.Memory.IdentityCr3.All);
+	__vmx_vmwrite(HOST_CR3, g_VmState.Memory.IdentityCr3.All);
 	__vmx_vmwrite(HOST_CR4, __readcr4());
 
 	__vmx_vmwrite(HOST_FS_BASE, 0);
 	__vmx_vmwrite(HOST_GS_BASE, (UINT64)Cpu);
 
-	__vmx_vmwrite(HOST_TR_BASE, (UINT64)VmState.SharedState.TssBase);
-	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)VmState.SharedState.GdtBase);
-	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)VmState.SharedState.IdtBase);
+	__vmx_vmwrite(HOST_TR_BASE, (UINT64)g_VmState.SharedState.TssBase);
+	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)g_VmState.SharedState.GdtBase);
+	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)g_VmState.SharedState.IdtBase);
 
 	__vmx_vmwrite(HOST_RIP, (UINT64)AsmVmExit);
 	__vmx_vmwrite(HOST_RSP, (UINT64)&Cpu->Data.HostStack);
@@ -387,7 +389,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_DS_SELECTOR, AsmReadDs());
 	__vmx_vmwrite(GUEST_LDTR_SELECTOR, AsmReadLdtr());
 
-	__vmx_vmwrite(GUEST_TR_SELECTOR, VmState.SharedState.TrSelector);
+	__vmx_vmwrite(GUEST_TR_SELECTOR, g_VmState.SharedState.TrSelector);
 	__vmx_vmwrite(GUEST_FS_SELECTOR, AsmReadFs());
 	__vmx_vmwrite(GUEST_GS_SELECTOR, AsmReadGs());
 	__vmx_vmwrite(GUEST_CS_SELECTOR, AsmReadCs());
@@ -399,7 +401,7 @@ SetupVmcs(
 
 	__vmx_vmwrite(GUEST_FS_LIMIT, AsmLoadSegmentLimit(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_LIMIT, AsmLoadSegmentLimit(AsmReadGs()));
-	__vmx_vmwrite(GUEST_TR_LIMIT, VmState.SharedState.TrLimit);
+	__vmx_vmwrite(GUEST_TR_LIMIT, g_VmState.SharedState.TrLimit);
 
 	__vmx_vmwrite(GUEST_ES_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadEs()));
 	__vmx_vmwrite(GUEST_CS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadCs()));
@@ -407,7 +409,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_DS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadDs()));
 	__vmx_vmwrite(GUEST_FS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadFs()));
 	__vmx_vmwrite(GUEST_GS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadGs()));
-	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, VmState.SharedState.TrAccessRights);
+	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, g_VmState.SharedState.TrAccessRights);
 	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(0));
 
 	__vmx_vmwrite(GUEST_FS_BASE, (UINT64)Cpu);
@@ -416,15 +418,15 @@ SetupVmcs(
 	IA32_DESCRIPTOR Descriptor = { 0 };
 	AsmReadIdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)VmState.SharedState.IdtBase);
+	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)g_VmState.SharedState.IdtBase);
 	__vmx_vmwrite(GUEST_IDTR_LIMIT, Descriptor.Limit);
 
 	AsmReadGdtr(&Descriptor);
 
-	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)VmState.SharedState.Gdt);
+	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)g_VmState.SharedState.Gdt);
 	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
 
-	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)VmState.SharedState.GdtBase);
+	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)g_VmState.SharedState.GdtBase);
 
 	//
 	// Intel's propaganda to force everyone to use sysenter again.
@@ -436,7 +438,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, MAX_UINT64);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
-	__vmx_vmwrite(GUEST_CR3, VmState.Memory.IdentityCr3.All);
+	__vmx_vmwrite(GUEST_CR3, g_VmState.Memory.IdentityCr3.All);
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());

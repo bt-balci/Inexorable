@@ -1,38 +1,114 @@
 #include <Uefi.h>
+#include <Library/DebugLib.h>
+#include <Library/BaseMemoryLib.h>
 
 #include "Efi.h"
 #include "Memory.h"
 #include "x86.h"
 #include "Vm.h"
 
-/*
-    Maybe this shouuld return a BOOLEAN?
-*/
-VOID*
+BOOLEAN
 EFIAPI
-TranslateGuestToHostAddress(
-    IN UINT64 GuestPhysicalAddress
+CopyFromGuest(
+    IN CR3      GuestCr3,
+    IN VOID*    HostBuffer,
+    IN UINT64   GuestVirtualAddress,
+    IN UINTN    Size
 ) {
+    UINT8* Dst = (UINT8*)HostBuffer;
+    UINT64 SrcGva = GuestVirtualAddress;
+    UINTN BytesRemaining = Size;
+
+    while (BytesRemaining > 0) {
+        VOID* HostPointer = NULL;
+
+        if (!TranslateGuestAddressToHostAddress(GuestCr3, SrcGva, &HostPointer)) {
+            //
+            // Maybe inject pagefault.
+            //
+            return FALSE;
+        }
+
+        //
+        // Calculate how many bytes we can safely copy before hitting the next page boundary.
+        //
+        UINTN OffsetInPage = SrcGva & 0xFFF;
+        UINTN BytesToCopyThisPage = 4096 - OffsetInPage;
+        if (BytesToCopyThisPage > BytesRemaining) {
+            BytesToCopyThisPage = BytesRemaining;
+        }
+
+        CopyMem(Dst, HostPointer, BytesToCopyThisPage);
+
+        Dst += BytesToCopyThisPage;
+        SrcGva += BytesToCopyThisPage;
+        BytesRemaining -= BytesToCopyThisPage;
+    }
+
+    return TRUE;
+}
+
+BOOLEAN
+EFIAPI
+CopyToGuest(
+    IN CR3      GuestCr3,
+    IN VOID*    HostBuffer,
+    IN UINT64   GuestVirtualAddress,
+    IN UINTN    Size
+) {
+    UINT8*  Source = (UINT8*)HostBuffer;
+    UINT64  Destination = GuestVirtualAddress;
+    UINTN   BytesRemaining = Size;
+
+    while (BytesRemaining > 0) {
+        VOID* HostPointer = NULL;
+
+        if (!TranslateGuestAddressToHostAddress(GuestCr3, Destination, &HostPointer)) return FALSE;
+
+        UINTN Offset = Destination & 0xFFF;
+        UINTN BytesToCopy = 0x1000 - Offset;
+        if (BytesToCopy > BytesRemaining) {
+            BytesToCopy = BytesRemaining;
+        }
+
+        CopyMem(HostPointer, Source, BytesToCopy);
+
+        Destination += BytesToCopy;
+        Source += BytesToCopy;
+        BytesRemaining -= BytesToCopy;
+    }
+
+    return TRUE;
+}
+
+BOOLEAN
+EFIAPI
+TranslateGuestPhysicalToHostPhysical(
+    IN UINT64   GuestPhysicalAddress,
+    OUT VOID**  HostPhysicalAddress
+) {
+    *HostPhysicalAddress = NULL;
+
     UINT16 Pml4Idx  = (GuestPhysicalAddress >> 39) & 0x1FF;
     UINT16 PdptIdx  = (GuestPhysicalAddress >> 30) & 0x1FF;
     UINT16 PdIdx    = (GuestPhysicalAddress >> 21) & 0x1FF;
     UINT16 PtIdx    = (GuestPhysicalAddress >> 12) & 0x1FF;
     UINT16 Offset   = (GuestPhysicalAddress) & 0xFFF;
 
-    EPT_PML4* Epml4 = &VmState.Memory.Epml4[Pml4Idx];
+    EPT_PML4* Epml4 = &g_VmState.Memory.Epml4[Pml4Idx];
     //DebugPrint0402("Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
     if (!Epml4->Present)
-        return NULL;
+        return FALSE;
 
     EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
     //DebugPrint0402("Pdpt = 0x%x at 0x%p\n", Pdpt->All, Pdpt);
     if (!Pdpt->Present)
-        return NULL;
+        return FALSE;
 
     EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
     //DebugPrint0402("Pd = 0x%x at 0x%p\n", Pd->All, Pd);
     if (!Pd->Present)
-        return NULL;
+        return FALSE;
 
     /*
     if (Pd->Large)
@@ -42,13 +118,83 @@ TranslateGuestToHostAddress(
     EPT_PTE* Pt = &(((EPT_PTE*)(((EPT_PDE*)Pd)->PhysicalAddress << 12))[PtIdx]);
     //DebugPrint0402("Pt = 0x%x at 0x%p\n", Pt->All, Pt);
     if (!Pt->Present)
-        return NULL;
+        return FALSE;
 
     UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12) + Offset;
 
     DebugPrint0402("GPA = 0x%p, translates to HPA = 0x%p. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", GuestPhysicalAddress, Result, Pml4Idx, PdptIdx, PdIdx, PtIdx);
-    return (VOID*)Result;
+
+    *HostPhysicalAddress = (VOID*)Result;
+
+    return TRUE;
 }
+
+BOOLEAN
+EFIAPI
+TranslateGuestVirtualToGuestPhysical(
+    IN CR3      GuestCr3,
+    IN UINT64   GuestVirtualAddress,
+    OUT UINT64* GuestPhysicalAddress
+) {
+    *GuestPhysicalAddress = NULL;
+
+    UINT16 Pml4Idx = (GuestVirtualAddress >> 39) & 0x1FF;
+    UINT16 PdptIdx = (GuestVirtualAddress >> 30) & 0x1FF;
+    UINT16 PdIdx = (GuestVirtualAddress >> 21) & 0x1FF;
+    UINT16 PtIdx = (GuestVirtualAddress >> 12) & 0x1FF;
+    UINT16 Offset = (GuestVirtualAddress) & 0xFFF;
+
+    PML4* Pml4 = NULL;
+    if (!TranslateGuestPhysicalToHostPhysical(GuestCr3.PhysicalAddress << 12, (VOID**)&Pml4)) return FALSE;
+    if (!Pml4[Pml4Idx].Present) return FALSE;
+
+    PDPTE* Pdpt = NULL;
+    if (!TranslateGuestPhysicalToHostPhysical(Pml4[Pml4Idx].PhysicalAddress << 12, (VOID**)&Pdpt)) return FALSE;
+    if (!Pdpt[PdptIdx].Present) return FALSE;
+
+    if (Pdpt[PdptIdx].Large) {
+        PDPE_LARGE* PdpeLarge = (PDPE_LARGE*)&Pdpt[PdptIdx];
+        UINT64 Offset1GB = GuestVirtualAddress & 0x3FFFFFFF; // 30-bit offset
+
+        *GuestPhysicalAddress = (UINT64)(PdpeLarge->PhysicalAddress << 30) + Offset1GB;
+        return TRUE;
+    }
+
+    PDE* Pde = NULL;
+    if (!TranslateGuestPhysicalToHostPhysical(Pdpt[PdptIdx].PhysicalAddress << 12, (VOID**)&Pde)) return FALSE;
+    if (!Pde[PdIdx].Present) return FALSE;
+
+    if (Pde[PdIdx].Large) {
+        PDE_LARGE* PdeLarge = (PDE_LARGE*)&Pde[PdIdx];
+        UINT64 Offset2MB = GuestVirtualAddress & 0x1FFFFF; // 21-bit offset
+
+        *GuestPhysicalAddress = (UINT64)(PdeLarge->PhysicalAddress << 21) + Offset2MB;
+        return TRUE;
+    }
+
+    PTE* Pte = NULL;
+    if (!TranslateGuestPhysicalToHostPhysical(Pde[PdIdx].PhysicalAddress << 12, (VOID**)&Pte)) return FALSE;
+    if (!Pte[PtIdx].Present) return FALSE;
+
+    *GuestPhysicalAddress = (UINT64)((Pte[PtIdx].PhysicalAddress << 12)) + Offset;
+
+    return TRUE;
+}
+
+BOOLEAN
+EFIAPI
+TranslateGuestAddressToHostAddress(
+    IN CR3      GuestCr3,
+    IN UINT64   GuestVirtual,
+    OUT VOID**  HostVirtual
+) {
+
+    UINT64 HostPhysical = 0;
+    if (!TranslateGuestVirtualToGuestPhysical(GuestCr3, GuestVirtual, &HostPhysical)) return FALSE;
+
+    return TranslateGuestPhysicalToHostPhysical(HostPhysical, HostVirtual);
+}
+
 
 BOOLEAN
 EFIAPI
@@ -68,20 +214,20 @@ MapSinglePage(
     //
     // PML4 Level
     //
-    EPT_PML4* Epml4 = &VmState.Memory.Epml4[Pml4Idx];
+    EPT_PML4* Epml4 = &g_VmState.Memory.Epml4[Pml4Idx];
     if (!Epml4->Present) {
         Epml4->Execute = TRUE;
         Epml4->Write = TRUE;
         Epml4->Read = TRUE;
         Epml4->ExecuteUser = TRUE;
 
-        if (VmState.Memory.EpdptCount >= 64) {
+        if (g_VmState.Memory.EpdptCount >= 64) {
             DebugPrint0402("g_EpdptCount is bigger than 64. Borked\n");
             return FALSE;
         }
-        UINT32 PdptPoolIndex = VmState.Memory.EpdptCount++;
+        UINT32 PdptPoolIndex = g_VmState.Memory.EpdptCount++;
 
-        Epml4->PhysicalAddress = ((UINT64)&VmState.Memory.Epdpt[PdptPoolIndex][0]) >> 12;
+        Epml4->PhysicalAddress = ((UINT64)&g_VmState.Memory.Epdpt[PdptPoolIndex][0]) >> 12;
         Epml4->Present = TRUE;
 
         //DebugPrint0402("EPT_PML4 = 0x%p at 0x%p\n", Epml4->All, Epml4);
@@ -98,13 +244,13 @@ MapSinglePage(
         Pdpt->Read = TRUE;
         Pdpt->ExecuteUser = TRUE;
 
-        if (VmState.Memory.EpdeCount >= 512) {
+        if (g_VmState.Memory.EpdeCount >= 512) {
             DebugPrint0402("g_EpdeCount is bigger than 512. Borked\n");
             return FALSE;
         }
-        UINT32 PdPoolIndex = VmState.Memory.EpdeCount++;
+        UINT32 PdPoolIndex = g_VmState.Memory.EpdeCount++;
 
-        Pdpt->PhysicalAddress = ((UINT64)&VmState.Memory.Epde[PdPoolIndex][0]) >> 12;
+        Pdpt->PhysicalAddress = ((UINT64)&g_VmState.Memory.Epde[PdPoolIndex][0]) >> 12;
         Pdpt->Present = TRUE;
         //DebugPrint0402("EPT_PDPTE = 0x%p at %p\n", Pdpt->All, Pdpt);
     }
@@ -152,14 +298,14 @@ MapSinglePage(
         //
         // Hmm. Can we get borked? Better log than hang.
         //
-        if (VmState.Memory.EpteCount >= 16384) {
+        if (g_VmState.Memory.EpteCount >= 16384) {
             DebugPrint0402("g_EpteCount is bigger than 16384. Borked\n");
             return FALSE;
         }
 
-        UINT32 PtPoolIndex = VmState.Memory.EpteCount++;
+        UINT32 PtPoolIndex = g_VmState.Memory.EpteCount++;
 
-        NonLargePd->PhysicalAddress = ((UINT64)&VmState.Memory.Epte[PtPoolIndex][0]) >> 12;
+        NonLargePd->PhysicalAddress = ((UINT64)&g_VmState.Memory.Epte[PtPoolIndex][0]) >> 12;
         NonLargePd->Present = TRUE;
 
         //DebugPrint0402("EPT_PDE = 0x%p at %p. EPTE count = %d\n", NonLargePd->All, NonLargePd, g_EpteCount);

@@ -305,7 +305,7 @@ typedef union {
 		UINT64 Ignored3 : 11;
 		UINT64 NoExecute : 1;
 	};
-} PML4_1GB;
+} PML4;
 
 typedef union {
 	UINT64 All;
@@ -327,7 +327,85 @@ typedef union {
 		UINT64 PKE : 4;
 		UINT64 NoExecute : 1;
 	};
-} PDPE_1GB;
+} PDPE_LARGE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Present : 1;
+		UINT64 Write : 1;
+		UINT64 User : 1;
+		UINT64 WriteThrough : 1;
+		UINT64 CacheDisabled : 1;
+		UINT64 Accessed : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 Large : 1;
+		UINT64 Ignored2 : 4;
+		UINT64 PhysicalAddress : 40;
+		UINT64 Ignored3 : 11;
+		UINT64 NoExecute : 1;
+	};
+} PDPTE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Present : 1;
+		UINT64 Write : 1;
+		UINT64 User : 1;
+		UINT64 WriteThrough : 1;
+		UINT64 CacheDisabled : 1;
+		UINT64 Accessed : 1;
+		UINT64 Dirty : 1;
+		UINT64 Large : 1;
+		UINT64 Global : 1;
+		UINT64 Ignored1 : 3;
+		UINT64 PAT : 1;
+		UINT64 Reserved : 8;
+		UINT64 PhysicalAddress : 31;
+		UINT64 Ignored2 : 7;
+		UINT64 PKE : 4; 
+		UINT64 NoExecute : 1;
+	};
+} PDE_LARGE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Present : 1;
+		UINT64 Write : 1;
+		UINT64 User : 1;
+		UINT64 WriteThrough : 1;
+		UINT64 CacheDisabled : 1;
+		UINT64 Accessed : 1;
+		UINT64 Ignored1 : 1;
+		UINT64 Large : 1;
+		UINT64 Ignored2 : 4;
+		UINT64 PhysicalAddress : 40;
+		UINT64 Ignored3 : 11;
+		UINT64 NoExecute : 1;
+	};
+} PDE;
+
+typedef union {
+	UINT64 All;
+	struct {
+		UINT64 Present : 1;
+		UINT64 Write : 1;
+		UINT64 User : 1;
+		UINT64 WriteThrough : 1;
+		UINT64 CacheDisabled : 1;
+		UINT64 Accessed : 1;
+		UINT64 Dirty : 1;
+		UINT64 PAT : 1;
+		UINT64 Global : 1;
+		UINT64 Ignored1 : 3;
+		UINT64 PhysicalAddress : 40;
+		UINT64 Ignored2 : 7;
+		UINT64 PKE : 4;
+		UINT64 NoExecute : 1;
+	};
+} PTE;
 
 typedef union {
 	UINT64 All;

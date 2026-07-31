@@ -3,11 +3,16 @@
 
 #include <Uefi.h>
 
-#define CONFIG_CPU_COUNT	4
 
+//
+// Cringe.
+//
+#ifndef TABLES_DEFINED
+#define TABLES_DEFINED
 extern EFI_SYSTEM_TABLE*		gST;
 extern EFI_BOOT_SERVICES*		gBS;
 extern EFI_RUNTIME_SERVICES*	gRT;
+#endif
 
 extern CHAR8* gEfiCallerBaseName;
 

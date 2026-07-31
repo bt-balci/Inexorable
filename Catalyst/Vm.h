@@ -12,6 +12,7 @@
 // In page counts. (E.g. 4 = 0x4000 bytes)
 #define BSP_INITIAL_STACK_SIZE	4
 #define HOST_STACK_SIZE			0x4000
+#define CONFIG_CPU_COUNT		4
 
 ///////////////////////////////////////////////
 ////				VMCALLs 			   ////
@@ -61,6 +62,10 @@ typedef struct {
 	X86_CONTEXT_AREA Context;
 
 	struct {
+		CR3 Cr3;
+	} ExtendedContext;
+
+	struct {
 		UINT8 MsrBitmap[0x1000];
 		UINT8 HostStack[HOST_STACK_SIZE];
 	} __attribute__((aligned(4096))) Data;
@@ -104,8 +109,8 @@ typedef struct {
 		UINT32 EpdeCount;
 		UINT32 EpteCount;
 
-		__attribute__((aligned(4096))) PML4_1GB         IdentityPml4[512];
-		__attribute__((aligned(4096))) PDPE_1GB         IdentityPdpe[512];
+		__attribute__((aligned(4096))) PML4         IdentityPml4[512];
+		__attribute__((aligned(4096))) PDPE_LARGE         IdentityPdpe[512];
 
 		__attribute__((aligned(4096))) EPTP				Eptp;
 		__attribute__((aligned(4096))) EPT_PML4			Epml4[512];
@@ -128,7 +133,7 @@ typedef struct {
 ////				Globals				   ////
 ///////////////////////////////////////////////
 
-__attribute__((aligned(4096))) extern CATALYST_VIRTUAL_MACHINE VmState;
+__attribute__((aligned(4096))) extern CATALYST_VIRTUAL_MACHINE g_VmState;
 
 ///////////////////////////////////////////////
 ////				Enums				   ////

@@ -217,6 +217,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Firmware.c" />
     <ClCompile Include="Main.c" />
     <ClCompile Include="Memory.c" />
     <ClCompile Include="Util.c" />

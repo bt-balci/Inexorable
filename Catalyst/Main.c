@@ -13,13 +13,6 @@
 #include "Vm.h"
 #include "Memory.h"
 
-//
-// Inclusion skill issue.
-//
-EFI_SYSTEM_TABLE*		gST = NULL;
-EFI_BOOT_SERVICES*		gBS = NULL;
-EFI_RUNTIME_SERVICES*	gRT = NULL;
-
 CHAR8* gEfiCallerBaseName = "BT-BALCI";
 
 CONST UINT8 g_InexorableEfi[] = {
@@ -87,6 +80,7 @@ PrepareProcessors(
 		for (UINT32 i = 0; i < BSP_INITIAL_STACK_SIZE; i++) {
 			if (!MapSinglePage(Cpu->Context.Rsp + (i * 0x1000), Cpu->Context.Rsp + (i * 0x1000), FALSE)) {
 				DebugPrint0402("Failed to map BSP initial stack!\n");
+				return EFI_NO_MAPPING;
 			}
 		}
 
@@ -104,20 +98,20 @@ PrepareProcessors(
 	// 1:1 map descriptor structures. Read the disclaimer at Main.c for the other screw up.
 	// Warning: This will INEVITABLY BREAK if the Catalyst is not mapped over the 4GB limit and guest has more than 4GB memory. 
 	//
-	VmState.SharedState.GdtBase = (VOID*)Descriptor.Base;
-	MapSinglePage((UINT64)VmState.SharedState.GdtBase, (UINT64)VmState.SharedState.GdtBase, FALSE);
+	g_VmState.SharedState.GdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)g_VmState.SharedState.GdtBase, (UINT64)g_VmState.SharedState.GdtBase, FALSE);
 
-	VmState.SharedState.TssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
-	MapSinglePage((UINT64)VmState.SharedState.TssBase, (UINT64)VmState.SharedState.TssBase, FALSE);
+	g_VmState.SharedState.TssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
+	MapSinglePage((UINT64)g_VmState.SharedState.TssBase, (UINT64)g_VmState.SharedState.TssBase, FALSE);
 
 	AsmReadIdtr(&Descriptor);
 
-	VmState.SharedState.IdtBase = (VOID*)Descriptor.Base;
-	MapSinglePage((UINT64)VmState.SharedState.IdtBase, (UINT64)VmState.SharedState.IdtBase, FALSE);
+	g_VmState.SharedState.IdtBase = (VOID*)Descriptor.Base;
+	MapSinglePage((UINT64)g_VmState.SharedState.IdtBase, (UINT64)g_VmState.SharedState.IdtBase, FALSE);
 
-	VmState.SharedState.TrSelector		= AsmReadTr();
-	VmState.SharedState.TrAccessRights	= AsmLoadSegmentAccessRights(VmState.SharedState.TrSelector);
-	VmState.SharedState.TrLimit			= AsmLoadSegmentLimit(VmState.SharedState.TrSelector);
+	g_VmState.SharedState.TrSelector		= AsmReadTr();
+	g_VmState.SharedState.TrAccessRights	= AsmLoadSegmentAccessRights(g_VmState.SharedState.TrSelector);
+	g_VmState.SharedState.TrLimit			= AsmLoadSegmentLimit(g_VmState.SharedState.TrSelector);
 
 	//
 	// Set the interrupt handler for sexy APIC shenanigans.
@@ -215,7 +209,9 @@ LoadFirmware(
 	}
 
 	UINT64 GuestBaseAddress = FIRMWARE_IMAGE_BASE;
-	UINT8* HostBaseAddress = (UINT8*)TranslateGuestToHostAddress(GuestBaseAddress);
+	UINT8* HostBaseAddress = NULL;
+
+	if (!TranslateGuestPhysicalToHostPhysical(GuestBaseAddress, (VOID**)&HostBaseAddress)) return EFI_NO_MAPPING;
 
 	DebugPrint0402("Firmware image base GPA = 0x%p, HPA = 0x%p\n", GuestBaseAddress, HostBaseAddress);
 	
@@ -252,7 +248,10 @@ LoadFirmware(
 				ChunkSize = RemainingBytes;
 			}
 
-			CopyMem(TranslateGuestToHostAddress(CurrentGuestAddress), Source, ChunkSize);
+			VOID* HostAddress = NULL;
+			if (!TranslateGuestPhysicalToHostPhysical(CurrentGuestAddress, &HostAddress)) return EFI_NO_MAPPING;
+
+			CopyMem(HostAddress, Source, ChunkSize);
 
 			RemainingBytes -= ChunkSize;
 			CurrentGuestAddress += ChunkSize;
@@ -269,7 +268,10 @@ LoadFirmware(
 					ChunkSize = RemainingLength;
 				}
 
-				ZeroMem(TranslateGuestToHostAddress(CurrentGuestAddress), ChunkSize);
+				VOID* HostAddress = NULL;
+				if (!TranslateGuestPhysicalToHostPhysical(CurrentGuestAddress, &HostAddress)) return EFI_NO_MAPPING;
+
+				ZeroMem(HostAddress, ChunkSize);
 
 				CurrentGuestAddress += ChunkSize;
 				RemainingLength -= ChunkSize;
@@ -325,18 +327,18 @@ MapMemory(
 	//
 	// Initialize globals.
 	//
-	VmState.Memory.Eptp.DirtyAndAccessEnabled = FALSE;
-	VmState.Memory.Eptp.PageWalkLength = 3;
-	VmState.Memory.Eptp.MemoryType = 6;
-	VmState.Memory.Eptp.Pml4Address = ((UINT64)&VmState.Memory.Epml4) >> 12;
+	g_VmState.Memory.Eptp.DirtyAndAccessEnabled = FALSE;
+	g_VmState.Memory.Eptp.PageWalkLength = 3;
+	g_VmState.Memory.Eptp.MemoryType = 6;
+	g_VmState.Memory.Eptp.Pml4Address = ((UINT64)&g_VmState.Memory.Epml4) >> 12;
 
-	DebugPrint0402("g_Eptp = 0x%p\n", VmState.Memory.Eptp.All);
+	DebugPrint0402("g_Eptp = 0x%p\n", g_VmState.Memory.Eptp.All);
 
-	VmState.Memory.IdentityCr3.PhysicalAddress = ((UINT64)&VmState.Memory.IdentityPml4[0]) >> 12;
+	g_VmState.Memory.IdentityCr3.PhysicalAddress = ((UINT64)&g_VmState.Memory.IdentityPml4[0]) >> 12;
 
-	VmState.Memory.IdentityPml4[0].Present = TRUE;
-	VmState.Memory.IdentityPml4[0].Write = TRUE;
-	VmState.Memory.IdentityPml4[0].PhysicalAddress = ((UINT64)&VmState.Memory.IdentityPdpe[0]) >> 12;
+	g_VmState.Memory.IdentityPml4[0].Present = TRUE;
+	g_VmState.Memory.IdentityPml4[0].Write = TRUE;
+	g_VmState.Memory.IdentityPml4[0].PhysicalAddress = ((UINT64)&g_VmState.Memory.IdentityPdpe[0]) >> 12;
 
 	//
 	// Why not map the first 4GB only?
@@ -346,13 +348,13 @@ MapMemory(
 	// This might screw me over, but okay.
 	//
 	for (UINTN i = 0; i < 512; i++) {
-		VmState.Memory.IdentityPdpe[i].Present = TRUE;
-		VmState.Memory.IdentityPdpe[i].Large = TRUE;
-		VmState.Memory.IdentityPdpe[i].Write = TRUE;
-		VmState.Memory.IdentityPdpe[i].PhysicalAddress = i;
+		g_VmState.Memory.IdentityPdpe[i].Present = TRUE;
+		g_VmState.Memory.IdentityPdpe[i].Large = TRUE;
+		g_VmState.Memory.IdentityPdpe[i].Write = TRUE;
+		g_VmState.Memory.IdentityPdpe[i].PhysicalAddress = i;
 	}
 
-	DebugPrint0402("g_IdentityCr3 = 0x%p\n", VmState.Memory.IdentityCr3.All);
+	DebugPrint0402("g_IdentityCr3 = 0x%p\n", g_VmState.Memory.IdentityCr3.All);
 
 	DebugPrint0402("Mapping out free memory...\n");
 
@@ -394,10 +396,10 @@ MapMemory(
 	// into the EPT. We will identity map them (GPA == HPA) so we can safely
 	// pass their HPA directly to GUEST_CR3. (200 IQ, for now. Considering that we are above the 4GB but I can't be bothered.)
 	//
-	UINT64 Pml4Hpa = (UINT64)&VmState.Memory.IdentityPml4[0];
+	UINT64 Pml4Hpa = (UINT64)&g_VmState.Memory.IdentityPml4[0];
 	MapSinglePage(Pml4Hpa, Pml4Hpa, FALSE);
 
-	UINT64 PdpeHpa = (UINT64)&VmState.Memory.IdentityPdpe[0];
+	UINT64 PdpeHpa = (UINT64)&g_VmState.Memory.IdentityPdpe[0];
 	//
 	// Identity map the PDPEs. Gently...
 	//
