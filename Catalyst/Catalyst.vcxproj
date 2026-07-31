@@ -226,6 +226,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h" />
+    <ClInclude Include="Firmware.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="Vm.h" />
     <ClInclude Include="x86.h" />

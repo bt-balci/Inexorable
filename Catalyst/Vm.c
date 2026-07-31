@@ -8,6 +8,7 @@
 #include "Vm.h"
 #include "Efi.h"
 #include "Memory.h"
+#include "Firmware.h"
 
 __attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE g_VmState = { 0 };
 
@@ -228,15 +229,15 @@ VmExitHandler(
 	}
 
 	case VMEXIT_REASON_EPT_VIOLATION: {
-		VMX_EPT_VIOLATION_QUAILIFICATION EptQual = { .All = (UINT32)ExitQualification };
+		VMX_EPT_VIOLATION_QUAILIFICATION EptQualification = { .All = (UINT32)ExitQualification };
 
 		DebugPrint0402("EPT Violation. Read = %d, Write = %d, Execute = %d, "
 			"IsReadable = %d, IsWritable = %d, IsExecutable = %d, "
 			"UserExecute = %d, GuestLinearAddressValid = %d, TranslationBork = %d\n",
-			EptQual.Read, EptQual.Write, EptQual.Execute,
-			EptQual.IsReadable, EptQual.IsWritable, EptQual.IsExecutable,
-			EptQual.UserExecute, EptQual.GuestLinearAddressValid,
-			EptQual.TranslationBork);
+			EptQualification.Read, EptQualification.Write, EptQualification.Execute,
+			EptQualification.IsReadable, EptQualification.IsWritable, EptQualification.IsExecutable,
+			EptQualification.UserExecute, EptQualification.GuestLinearAddressValid,
+			EptQualification.TranslationBork);
 
 		Borked = TRUE;
 		break;
@@ -250,6 +251,7 @@ VmExitHandler(
 
 		switch (Cpu->Context.Rax) {
 		case CATALYST_VMCALL_GET_VARIABLE:
+			FirmwareGetVariable(Cpu);
 		case CATALYST_VMCALL_SET_VARIABLE:
 		case CATALYST_VMCALL_GET_NEXT_VARIABLE_NAME:
 		case CATALYST_VMCALL_QUERY_VARIABLE_INFO:

@@ -24,7 +24,7 @@ UINT64 g_CurrentGuestPhysicalAddress = 0;
 
 CONST UINT8 g_ApHalt[] = { 0xF4 };
 
-CATALYST_VIRTUAL_CPU VirtualProcessors[CONFIG_CPU_COUNT] = {0};
+CATALYST_VIRTUAL_CPU g_VirtualProcessors[CONFIG_CPU_COUNT] = {0};
 
 STATIC
 EFI_STATUS
@@ -65,7 +65,7 @@ PrepareProcessors(
 	// The guest OS will wake up APs. They must "sleep".
 	//
 	{
-		CATALYST_VIRTUAL_CPU* Cpu = &VirtualProcessors[0];
+		CATALYST_VIRTUAL_CPU* Cpu = &g_VirtualProcessors[0];
 		Cpu->Context.Rip = (UINT64)GuestRip;
 
 		//
@@ -122,7 +122,7 @@ PrepareProcessors(
 	// Index = 1 to skip the BSP (current processor).
 	//
 	for (UINTN i = 1; i < CONFIG_CPU_COUNT; i++) {
-		CATALYST_VIRTUAL_CPU* Cpu = &VirtualProcessors[i];
+		CATALYST_VIRTUAL_CPU* Cpu = &g_VirtualProcessors[i];
 		Cpu->Index = i;
 
 		//
@@ -153,7 +153,7 @@ PrepareProcessors(
 
 	DebugPrint0402("Preparing BSP...\n");
 
-	PrepareProcessor(&VirtualProcessors[0]);
+	PrepareProcessor(&g_VirtualProcessors[0]);
 
 	DebugPrint0402("BSP initialized. We are ready.\n");
 
