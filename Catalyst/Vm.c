@@ -249,12 +249,44 @@ VmExitHandler(
 			Cpu->Context.Rax, Cpu->Context.Rcx, Cpu->Context.Rdx,
 			Cpu->Context.R8, Cpu->Context.R9, Cpu->Context.R10, Cpu->Context.R11);
 
+		//
+		// Mhmmhmhhmh. What a beautiful... little switch case.... It's so hard to resist making it into a jump table....
+		// Snap out of it. Daddy Clang will do it for me anyways.
+		//
 		switch (Cpu->Context.Rax) {
 		case CATALYST_VMCALL_GET_VARIABLE:
 			FirmwareGetVariable(Cpu);
+			break;
 		case CATALYST_VMCALL_SET_VARIABLE:
+			FirmwareSetVariable(Cpu);
+			break;
 		case CATALYST_VMCALL_GET_NEXT_VARIABLE_NAME:
+			FirmwareGetNextVariableName(Cpu);
+			break;
 		case CATALYST_VMCALL_QUERY_VARIABLE_INFO:
+			FirmwareQueryVariableInfo(Cpu);
+			break;
+		case CATALYST_VMCALL_GET_TIME:
+			FirmwareGetTime(Cpu);
+			break;
+		case CATALYST_VMCALL_SET_TIME:
+			FirmwareSetTime(Cpu);
+			break;
+		case CATALYST_VMCALL_GET_WAKEUP_TIME:
+			FirmwareGetWakeupTime(Cpu);
+			break;
+		case CATALYST_VMCALL_SET_WAKEUP_TIME:
+			FirmwareSetWakeupTime(Cpu);
+			break;
+		case CATALYST_VMCALL_GET_NEXT_HIGH_MONO_COUNT:
+			FirmwareGetNextHighMonotonicCount(Cpu);
+			break;
+		case CATALYST_VMCALL_RESET_SYSTEM:
+			//
+			// Lol
+			//
+			__asm__ __volatile__("hlt");
+			break;
 		default:
 			Cpu->Context.Rax = EFI_NOT_FOUND;
 		}
