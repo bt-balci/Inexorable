@@ -302,6 +302,9 @@ VmExitHandler(
 		case CATALYST_VMCALL_ALLOCATE_PAGES:
 			FirmwareAllocatePages(Cpu);
 			break;
+		case CATALYST_VMCALL_GET_MEMORY_MAP:
+			FirmwareGetMemoryMap(Cpu);
+			break;
 		default:
 			Cpu->Context.Rax = EFI_NOT_FOUND;
 		}

@@ -39,3 +39,15 @@ IxAllocatePages(
 ) {
 	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_ALLOCATE_PAGES, Type, MemoryType, Pages, (UINT64)Memory, 0, 0);
 }
+
+EFI_STATUS
+EFIAPI
+IxGetMemoryMap(
+	IN OUT UINTN* MemoryMapSize,
+	OUT EFI_MEMORY_DESCRIPTOR* MemoryMap,
+	OUT UINTN* MapKey,
+	OUT UINTN* DescriptorSize,
+	OUT UINT32* DescriptorVersion
+) {
+	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_GET_MEMORY_MAP, (UINT64)MemoryMapSize, (UINT64)MemoryMap, (UINT64)MapKey, (UINT64)DescriptorSize, (UINT64)DescriptorVersion, 0);
+}

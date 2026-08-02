@@ -2,6 +2,10 @@
 #define _FIRMWARE_H_
 #include "Vm.h"
 
+///////////////////////////////////////////////
+////		     Runtime Services 		   ////
+///////////////////////////////////////////////
+
 VOID
 EFIAPI
 FirmwareGetVariable(
@@ -56,6 +60,9 @@ FirmwareGetNextHighMonotonicCount(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 );
 
+///////////////////////////////////////////////
+////		      Boot Services 		   ////
+///////////////////////////////////////////////
 
 VOID
 EFIAPI
@@ -84,6 +91,12 @@ FirmwareFreePages(
 VOID
 EFIAPI
 FirmwareAllocatePages(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+);
+
+VOID
+EFIAPI
+FirmwareGetMemoryMap(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 );
 

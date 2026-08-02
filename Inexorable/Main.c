@@ -1,5 +1,7 @@
 #include <Uefi.h>
 #include <Base.h>
+#include <Library/BaseMemoryLib.h>
+#include <Library/BaseLib.h>
 #include <Library/PrintLib.h>
 
 #include "Efi.h"
@@ -24,12 +26,24 @@ UefiMain(
 	//
 	// Setup system table.
 	//
+	gST.Hdr.HeaderSize	= sizeof(gST);
+	gST.Hdr.Revision	= EFI_SYSTEM_TABLE_REVISION;
+	gST.Hdr.Signature	= EFI_SYSTEM_TABLE_SIGNATURE;
+
+	gST.Hdr.CRC32 = CalculateCrc32(&gST.Hdr, gST.Hdr.HeaderSize);
+
 	gST.BootServices                = &gBS;
 	gST.RuntimeServices             = &gRT;
 
 	//
 	// Setup runtime services.
 	//
+	gRT.Hdr.HeaderSize	= sizeof(gRT);
+	gRT.Hdr.Revision	= EFI_RUNTIME_SERVICES_REVISION;
+	gRT.Hdr.Signature	= EFI_RUNTIME_SERVICES_SIGNATURE;
+
+	gRT.Hdr.CRC32 = CalculateCrc32(&gRT.Hdr, gRT.Hdr.HeaderSize);
+
 	gRT.GetVariable                 = IxGetVariable;
 	gRT.SetVariable                 = IxSetVariable;
 	gRT.QueryVariableInfo           = IxQueryVariableInfo;
@@ -49,6 +63,12 @@ UefiMain(
 	//
 	// Setup boot services.
 	//
+	gBS.Hdr.HeaderSize	= sizeof(gBS);
+	gBS.Hdr.Revision	= EFI_BOOT_SERVICES_REVISION;
+	gBS.Hdr.Signature	= EFI_BOOT_SERVICES_SIGNATURE;
+
+	gBS.Hdr.CRC32 = CalculateCrc32(&gBS.Hdr, gBS.Hdr.HeaderSize);
+
 	gBS.ExitBootServices			= IxExitBootServices;
 
 	gBS.AllocatePages				= IxAllocatePages;
@@ -56,4 +76,16 @@ UefiMain(
 
 	gBS.AllocatePool				= IxAllocatePool;
 	gBS.FreePool					= IxFreePool;
+
+	gBS.GetMemoryMap				= IxGetMemoryMap;
+
+	gBS.CalculateCrc32				= IxCalculateCrc32;
+
+	gBS.CopyMem						= IxCopyMem;
+	gBS.SetMem						= IxSetMem;
+
+	//
+	// Who uses this dude?
+	// 
+	//gBS.GetNextMonotonicCount		= IxGetNextHighMonotonicCount;
 }

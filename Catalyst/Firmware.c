@@ -558,7 +558,7 @@ FindFreePages(
 )
 {
 	UINT64 MaxAddrPage = 0;
-	UINT64 Start = g_VmState.Firmware.Memory.NextFreeHint;
+	UINT64 Start = 0;
 
 	if (AllocationType == AllocateAddress) {
 		//
@@ -662,7 +662,7 @@ AllocatePool(
 ) {
 	UINTN RealSize = Size + sizeof(POOL_HEADER);
 	UINT64 Base = 0;
-	UINTN Pages = EFI_SIZE_TO_PAGES(Size);
+	UINTN Pages = EFI_SIZE_TO_PAGES(RealSize);
 	EFI_STATUS Status = FindFreePages(AllocateAnyPages, Pages, &Base);
 	if (EFI_ERROR(Status)) return Status;
 
@@ -736,7 +736,6 @@ FirmwareAllocatePages(
 	// I can't be bothered tab-aligning them anymore.
 	//
 	EFI_ALLOCATE_TYPE AllocationType = Cpu->Context.Rcx;
-	EFI_MEMORY_TYPE MemoryType	= Cpu->Context.Rdx;
 	UINTN Pages = Cpu->Context.R8;
 	UINT64 OutPtr = 0;
 
@@ -800,4 +799,94 @@ FirmwareFreePool(
 	UINT64 Buffer = Cpu->Context.Rcx;
 
 	Cpu->Context.Rax = FreePool(Buffer);
+}
+
+VOID
+EFIAPI
+FirmwareGetMemoryMap(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+) {
+	//
+	// Simulate an actual map key.
+	//
+	g_VmState.Firmware.Memory.MapKey++;
+
+	UINT64 MemoryMapSizePtr = Cpu->Context.Rcx;
+	UINTN MemoryMapSize = 0;
+
+	UINT64 MemoryMapPtr = Cpu->Context.Rdx;
+	UINT64 MapKeyPtr = Cpu->Context.R8;
+	UINTN MapKey = g_VmState.Firmware.Memory.MapKey;
+
+	UINT64 DescriptorSizePtr = Cpu->Context.R9;
+	UINTN DescriptorSize = sizeof(EFI_MEMORY_DESCRIPTOR);
+
+	UINT64 DescriptorVersionPtr = Cpu->Context.R10;
+	UINT32 DescriptorVersion = EFI_MEMORY_DESCRIPTOR_VERSION;
+
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&MemoryMapSize, MemoryMapSizePtr, sizeof(MemoryMapSize))) goto EndPageFault;
+
+	UINTN MaximumDescriptors = MemoryMapSize / DescriptorSize;
+
+	//
+	// Count = Descriptors written
+	// i = Current page
+	//
+	for (UINT32 i = 0, Count = 0; i < g_VmState.Firmware.Memory.TotalPages; i++) {
+		BOOLEAN Allocated = (g_VmState.Firmware.Memory.MemoryBitmap[i / 8] >> (i % 8)) & 1;
+
+		UINT64 Start = i;
+		//
+		// Find end of the contiguous run.
+		//
+		while (i < g_VmState.Firmware.Memory.TotalPages && ((g_VmState.Firmware.Memory.MemoryBitmap[i / 8] >> (i % 8)) & 1) == Allocated) {
+			i++;
+		}
+
+		UINT64 Pages = i - Start;
+
+		//
+		// Return required size if buffer is too small.
+		//
+		if (Count >= MaximumDescriptors) {
+			Cpu->Context.Rax = EFI_BUFFER_TOO_SMALL;
+			goto End;
+		}
+
+		EFI_MEMORY_DESCRIPTOR Descriptor = {
+			.PhysicalStart = Start * EFI_PAGE_SIZE,
+			//
+			// The bootloader doesn't care about the type. It only cares whether it can be used for OS. So we return EfiConventionalMemory for free or EfiUnusableMemory and for allocated..
+			//
+			.Type = Allocated ? EfiUnusableMemory : EfiConventionalMemory,
+			.NumberOfPages = Pages,
+			.Attribute = EFI_MEMORY_RUNTIME,
+			.VirtualStart = 0
+		};
+
+		//
+		// Remember, guest address might not be a contiguous address. We have to copy it. One by one.
+		//
+		if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Descriptor, MemoryMapPtr + (DescriptorSize * Count), DescriptorSize)) goto EndPageFault;
+
+		Count++;
+		MemoryMapSize = Count * DescriptorSize;
+	}
+
+End:
+	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&MemoryMapSize, MemoryMapSizePtr, sizeof(MemoryMapSize))) goto EndPageFault;
+	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&DescriptorSize, DescriptorSizePtr, sizeof(DescriptorSizePtr))) goto EndPageFault;
+	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&DescriptorVersion, DescriptorVersionPtr, sizeof(DescriptorVersion))) goto EndPageFault;
+	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&MapKey, MapKeyPtr, sizeof(MapKey))) goto EndPageFault;
+
+	Cpu->Context.Rax = EFI_SUCCESS;
+
+	return;
+
+EndPageFault:
+	{
+		PAGE_FAULT_ERROR_CODE Error = { .Write = 0 };
+		InjectEvent(Error.All, TRUE, ExceptionInterruptTypePageFault,
+			InterruptionTypeHardwareException, TRUE);
+	}
 }

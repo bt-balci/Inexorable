@@ -30,3 +30,13 @@ IxAllocatePages(
 	IN UINTN						Pages,
 	IN OUT EFI_PHYSICAL_ADDRESS* Memory
 );
+
+EFI_STATUS
+EFIAPI
+IxGetMemoryMap(
+	IN OUT UINTN* MemoryMapSize,
+	OUT EFI_MEMORY_DESCRIPTOR* MemoryMap,
+	OUT UINTN* MapKey,
+	OUT UINTN* DescriptorSize,
+	OUT UINT32* DescriptorVersion
+);
