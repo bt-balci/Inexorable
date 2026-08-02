@@ -55,4 +55,11 @@ EFIAPI
 FirmwareGetNextHighMonotonicCount(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 );
+
+
+VOID
+EFIAPI
+FirmwareExitBootServices(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+)
 #endif

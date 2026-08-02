@@ -44,4 +44,10 @@ UefiMain(
 
 	gRT.SetVirtualAddressMap		= IxSetVirtualAddressMap;
 	gRT.ConvertPointer				= IxConvertPointer;
+
+	//
+	// Setup boot services.
+	//
+	gBS.ExitBootServices			= IxExitBootServices;
+	gB
 }

@@ -250,8 +250,7 @@ VmExitHandler(
 			Cpu->Context.R8, Cpu->Context.R9, Cpu->Context.R10, Cpu->Context.R11);
 
 		//
-		// Mhmmhmhhmh. What a beautiful... little switch case.... It's so hard to resist making it into a jump table....
-		// Snap out of it. Daddy Clang will do it for me anyways.
+		// What a beautiful, little switch case.... It's so hard to resist making it into a jump table....
 		//
 		switch (Cpu->Context.Rax) {
 		case CATALYST_VMCALL_GET_VARIABLE:
@@ -286,6 +285,10 @@ VmExitHandler(
 			// Lol
 			//
 			__asm__ __volatile__("hlt");
+			break;
+
+		case CATALYST_VMCALL_EXIT_BOOT_SERVICES:
+			FirmwareExitBootServices(Cpu);
 			break;
 		default:
 			Cpu->Context.Rax = EFI_NOT_FOUND;
@@ -396,7 +399,7 @@ SetupVmcs(
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
 
-	__vmx_vmwrite(EPTP_FULL, g_VmState.Memory.Eptp.All);
+	__vmx_vmwrite(EPTP_FULL, g_VmState.AddressSpace.Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
 	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT64);
 
@@ -415,7 +418,7 @@ SetupVmcs(
 	//
 	// Because for some reason, original identity page tables stay in EfiConventionalMemory. Which EPT mapping overwrites... Bruh
 	//
-	__vmx_vmwrite(HOST_CR3, g_VmState.Memory.IdentityCr3.All);
+	__vmx_vmwrite(HOST_CR3, g_VmState.AddressSpace.IdentityCr3.All);
 	__vmx_vmwrite(HOST_CR4, __readcr4());
 
 	__vmx_vmwrite(HOST_FS_BASE, 0);
@@ -485,7 +488,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, MAX_UINT64);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
-	__vmx_vmwrite(GUEST_CR3, g_VmState.Memory.IdentityCr3.All);
+	__vmx_vmwrite(GUEST_CR3, g_VmState.AddressSpace.IdentityCr3.All);
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());

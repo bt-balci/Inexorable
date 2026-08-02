@@ -327,18 +327,18 @@ MapMemory(
 	//
 	// Initialize globals.
 	//
-	g_VmState.Memory.Eptp.DirtyAndAccessEnabled = FALSE;
-	g_VmState.Memory.Eptp.PageWalkLength = 3;
-	g_VmState.Memory.Eptp.MemoryType = 6;
-	g_VmState.Memory.Eptp.Pml4Address = ((UINT64)&g_VmState.Memory.Epml4) >> 12;
+	g_VmState.AddressSpace.Eptp.DirtyAndAccessEnabled = FALSE;
+	g_VmState.AddressSpace.Eptp.PageWalkLength = 3;
+	g_VmState.AddressSpace.Eptp.MemoryType = 6;
+	g_VmState.AddressSpace.Eptp.Pml4Address = ((UINT64)&g_VmState.AddressSpace.Epml4) >> 12;
 
-	DebugPrint0402("g_Eptp = 0x%p\n", g_VmState.Memory.Eptp.All);
+	DebugPrint0402("g_Eptp = 0x%p\n", g_VmState.AddressSpace.Eptp.All);
 
-	g_VmState.Memory.IdentityCr3.PhysicalAddress = ((UINT64)&g_VmState.Memory.IdentityPml4[0]) >> 12;
+	g_VmState.AddressSpace.IdentityCr3.PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.IdentityPml4[0]) >> 12;
 
-	g_VmState.Memory.IdentityPml4[0].Present = TRUE;
-	g_VmState.Memory.IdentityPml4[0].Write = TRUE;
-	g_VmState.Memory.IdentityPml4[0].PhysicalAddress = ((UINT64)&g_VmState.Memory.IdentityPdpe[0]) >> 12;
+	g_VmState.AddressSpace.IdentityPml4[0].Present = TRUE;
+	g_VmState.AddressSpace.IdentityPml4[0].Write = TRUE;
+	g_VmState.AddressSpace.IdentityPml4[0].PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.IdentityPdpe[0]) >> 12;
 
 	//
 	// Why not map the first 4GB only?
@@ -348,13 +348,13 @@ MapMemory(
 	// This might screw me over, but okay.
 	//
 	for (UINTN i = 0; i < 512; i++) {
-		g_VmState.Memory.IdentityPdpe[i].Present = TRUE;
-		g_VmState.Memory.IdentityPdpe[i].Large = TRUE;
-		g_VmState.Memory.IdentityPdpe[i].Write = TRUE;
-		g_VmState.Memory.IdentityPdpe[i].PhysicalAddress = i;
+		g_VmState.AddressSpace.IdentityPdpe[i].Present = TRUE;
+		g_VmState.AddressSpace.IdentityPdpe[i].Large = TRUE;
+		g_VmState.AddressSpace.IdentityPdpe[i].Write = TRUE;
+		g_VmState.AddressSpace.IdentityPdpe[i].PhysicalAddress = i;
 	}
 
-	DebugPrint0402("g_IdentityCr3 = 0x%p\n", g_VmState.Memory.IdentityCr3.All);
+	DebugPrint0402("g_IdentityCr3 = 0x%p\n", g_VmState.AddressSpace.IdentityCr3.All);
 
 	DebugPrint0402("Mapping out free memory...\n");
 
@@ -396,10 +396,10 @@ MapMemory(
 	// into the EPT. We will identity map them (GPA == HPA) so we can safely
 	// pass their HPA directly to GUEST_CR3. (200 IQ, for now. Considering that we are above the 4GB but I can't be bothered.)
 	//
-	UINT64 Pml4Hpa = (UINT64)&g_VmState.Memory.IdentityPml4[0];
+	UINT64 Pml4Hpa = (UINT64)&g_VmState.AddressSpace.IdentityPml4[0];
 	MapSinglePage(Pml4Hpa, Pml4Hpa, FALSE);
 
-	UINT64 PdpeHpa = (UINT64)&g_VmState.Memory.IdentityPdpe[0];
+	UINT64 PdpeHpa = (UINT64)&g_VmState.AddressSpace.IdentityPdpe[0];
 	//
 	// Identity map the PDPEs. Gently...
 	//

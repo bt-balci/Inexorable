@@ -20,3 +20,12 @@ IxResetSystem(
 ) {
 	__vmx_vmcall(CATALYST_VMCALL_RESET_SYSTEM, (UINT64)ResetType, (UINT64)ResetStatus, (UINT64)DataSize, (UINT64)ResetData, 0, 0);
 }
+
+EFI_STATUS
+EFIAPI
+IxExitBootServices(
+	IN EFI_HANDLE	ImageHandle,
+	IN UINTN		MapKey
+) {
+	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_EXIT_BOOT_SERVICES, (UINT64)ImageHandle, MapKey, 0, 0, 0, 0);
+}

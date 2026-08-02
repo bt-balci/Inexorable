@@ -5,6 +5,10 @@
 #include "Memory.h"
 #include "Vm.h"
 
+///////////////////////////////////////////////
+////		     Runtime Services 		   ////
+///////////////////////////////////////////////
+
 VOID
 EFIAPI
 FirmwareGetVariable(
@@ -515,6 +519,178 @@ FirmwareGetNextHighMonotonicCount(
 	}
 
 	return;
+
+EndPageFault:
+	{
+		PAGE_FAULT_ERROR_CODE Error = { .Write = 0 };
+		InjectEvent(Error.All, TRUE, ExceptionInterruptTypePageFault,
+			InterruptionTypeHardwareException, TRUE);
+	}
+}
+
+
+///////////////////////////////////////////////
+////		      Boot Services 		   ////
+///////////////////////////////////////////////
+
+VOID
+EFIAPI
+FirmwareExitBootServices(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+) {
+	if (g_VmState.Firmware.Memory.MapKey != Cpu->Context.Rdx) {
+		Cpu->Context.Rax = EFI_INVALID_PARAMETER;
+		return;
+	}
+
+	g_VmState.Firmware.ExitedBootServices = TRUE;
+	Cpu->Context.Rax = EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+FindFreePages(
+	IN EFI_ALLOCATE_TYPE	AllocationType,
+	IN UINTN				Pages,
+	IN OUT UINT64*			OutPageBase
+)
+{
+	UINT64 MaxAddrPage = 0;
+	UINT64 Start = g_VmState.Firmware.Memory.NextFreeHint;
+
+	if (AllocationType == AllocateAddress) {
+		//
+		// Exact address requested; must be free.
+		//
+		Start = *OutPageBase;
+		for (UINT64 j = Start; j < Start + Pages; j++) {
+			UINT64 Byte = j / 8;
+			UINT8  Bit = j % 8;
+			if (g_VmState.Firmware.Memory.MemoryBitmap[Byte] & (1 << Bit)) {
+				return EFI_OUT_OF_RESOURCES;
+			}
+		}
+		// Mark and return
+		for (UINT64 j = Start; j < Start + Pages; j++) {
+			UINT64 Byte = j / 8;
+			UINT8  Bit = j % 8;
+			g_VmState.Firmware.Memory.MemoryBitmap[Byte] |= (1 << Bit);
+		}
+		*OutPageBase = Start;
+		return EFI_SUCCESS;
+	} else if (AllocationType == AllocateMaxAddress) {
+		//
+		// Input *OutPageBase is the maximum address (byte address).
+		// Convert to page index (round down, ensure >= Pages-1).
+		//
+		MaxAddrPage = *OutPageBase >> EFI_PAGE_SHIFT;
+		if (MaxAddrPage < Pages - 1) {
+			return EFI_OUT_OF_RESOURCES;
+		}
+
+		Start = g_VmState.Firmware.Memory.NextFreeHint;
+		if (Start > MaxAddrPage - Pages + 1) {
+			Start = 0;  // hint out of range, start at bottom
+		}
+	}
+	else { // AllocateAnyPages
+		MaxAddrPage = g_VmState.Firmware.Memory.TotalPages;
+		Start = g_VmState.Firmware.Memory.NextFreeHint;
+	}
+
+	UINT64 i = Start;
+	UINTN Found = 0;
+
+	while (TRUE) {
+		if (i + Pages > MaxAddrPage) {
+			//
+			// For AllocateMaxAddress we cannot cross the max. Wrap to 0 if not wrapped yet.
+			//
+			if (AllocationType == AllocateMaxAddress && Start != 0) {
+				i = 0;
+				Found = 0;
+				//
+				// Prevent re-wrapping.
+				//
+				Start = 0;
+				continue;
+			}
+			return EFI_OUT_OF_RESOURCES;
+		}
+
+		//
+		// Check bit for page i
+		//
+		UINT64 Byte = i / 8;
+		UINT8  Bit = i % 8;
+		if ((g_VmState.Firmware.Memory.MemoryBitmap[Byte] & (1 << Bit)) == 0) {
+			if (++Found == Pages) {
+				UINT64 Base = i - Pages + 1;
+				for (UINT64 j = Base; j < Base + Pages; j++) {
+					Byte = j / 8;
+					Bit = j % 8;
+					g_VmState.Firmware.Memory.MemoryBitmap[Byte] |= (1 << Bit);
+				}
+				g_VmState.Firmware.Memory.NextFreeHint = Base + Pages;
+				*OutPageBase = Base;
+				return EFI_SUCCESS;
+			}
+		}
+		else {
+			Found = 0;
+		}
+
+		i++;
+		if (i == Start) {
+			//
+			// Full wraparound (only possible for AllocateAnyPages with hint)
+			//
+			break;
+		}
+	}
+	return EFI_OUT_OF_RESOURCES;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+FreeGuestPages(
+	IN UINT64	BasePage,
+	IN UINTN	Pages
+)
+{
+	for (UINT64 i = BasePage; i < BasePage + Pages; i++) {
+		UINT64 Byte = i / 8;
+		UINT8 Bit = i % 8;
+		g_VmState.Firmware.Memory.MemoryBitmap[Byte] &= ~(1 << Bit);
+	}
+	if (BasePage < g_VmState.Firmware.Memory.NextFreeHint) g_VmState.Firmware.Memory.NextFreeHint = BasePage;
+	return EFI_SUCCESS;
+}
+
+VOID
+EFIAPI
+FirmwareAllocatePages(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+) {
+	//
+	// I can't be bothered tab-aligning them anymore.
+	//
+	EFI_ALLOCATE_TYPE AllocationType = Cpu->Context.Rcx;
+	EFI_MEMORY_TYPE MemoryType	= Cpu->Context.Rdx;
+	UINTN Pages = Cpu->Context.R8;
+	UINT64 OutPtr = 0;
+
+	UINT64 Allocated;
+
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)OutPtr, Cpu->Context.R9, sizeof(OutPtr))) goto EndPageFault;
+
+	Cpu->Context.Rax = FindFreePages(AllocationType, Pages, (UINT64*)&Allocated);
+
+	if (EFI_ERROR(Cpu->Context.Rax)) return;
+
+	if (CopyToGuest(Cpu->ExtendedContext.Cr3, Allocated, OutPtr, sizeof(Allocated))) return;
 
 EndPageFault:
 	{

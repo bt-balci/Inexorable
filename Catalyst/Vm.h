@@ -8,11 +8,18 @@
 ////			  Definitions			   ////
 ///////////////////////////////////////////////
 
-#define FIRMWARE_IMAGE_BASE		0x1000
+#define FIRMWARE_IMAGE_BASE			0x1000
+
+//
 // In page counts. (E.g. 4 = 0x4000 bytes)
-#define BSP_INITIAL_STACK_SIZE	4
-#define HOST_STACK_SIZE			0x4000
-#define CONFIG_CPU_COUNT		4
+//
+#define BSP_INITIAL_STACK_SIZE		4
+
+#define HOST_STACK_SIZE				0x4000
+
+#define CONFIG_CPU_COUNT			4
+
+#define MAXIMUM_GUEST_ALLOCATIONS	128
 
 ///////////////////////////////////////////////
 ////				VMCALLs 			   ////
@@ -30,6 +37,9 @@
 
 #define CATALYST_VMCALL_GET_NEXT_HIGH_MONO_COUNT	0x8
 #define CATALYST_VMCALL_RESET_SYSTEM				0x9
+
+
+#define CATALYST_VMCALL_EXIT_BOOT_SERVICES			0x10
 
 ///////////////////////////////////////////////
 ////				Structs				   ////
@@ -57,17 +67,6 @@ typedef struct {
 
 	UINT32 Index;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_CPU;
-
-typedef struct {
-	//
-	// Pray it works.
-	//
-	CHAR16 VariableName[256];
-	EFI_GUID VendorGuid;
-	UINT32 Attributes;
-	UINTN DataSize;
-	VOID* Data;
-} NVRAM_NODE;
 
 typedef struct {
 	struct {
@@ -102,10 +101,20 @@ typedef struct {
 		__attribute__((aligned(4096))) EPT_PDPTE        Epdpt[64][512];
 		__attribute__((aligned(4096))) EPT_LARGE_PDE    Epde[512][512];
 		__attribute__((aligned(4096))) EPT_PTE			Epte[16384][512];
-	} Memory;
+	} AddressSpace;
 
 	struct {
 		BOOLEAN ExitedBootServices;
+		struct {
+			//
+			// Do we really need this guy?
+			//
+			UINTN MapKey;
+
+			UINT8 MemoryBitmap[MAXIMUM_GUEST_ALLOCATIONS];
+			UINTN TotalPages;
+			UINTN NextFreeHint;
+		} Memory;
 	} Firmware;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE;
 
