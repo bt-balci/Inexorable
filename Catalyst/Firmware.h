@@ -61,5 +61,30 @@ VOID
 EFIAPI
 FirmwareExitBootServices(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
-)
+);
+
+VOID
+EFIAPI
+FirmwareFreePool(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+);
+
+VOID
+EFIAPI
+FirmwareAllocatePool(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+);
+
+VOID
+EFIAPI
+FirmwareFreePages(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+);
+
+VOID
+EFIAPI
+FirmwareAllocatePages(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+);
+
 #endif

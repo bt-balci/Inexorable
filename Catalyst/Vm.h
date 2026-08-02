@@ -19,7 +19,7 @@
 
 #define CONFIG_CPU_COUNT			4
 
-#define MAXIMUM_GUEST_ALLOCATIONS	128
+#define MAXIMUM_GUEST_ALLOCATIONS	1024
 
 ///////////////////////////////////////////////
 ////				VMCALLs 			   ////
@@ -40,6 +40,10 @@
 
 
 #define CATALYST_VMCALL_EXIT_BOOT_SERVICES			0x10
+#define CATALYST_VMCALL_ALLOCATE_POOL				0x11
+#define CATALYST_VMCALL_ALLOCATE_PAGES				0x12
+#define CATALYST_VMCALL_FREE_POOL					0x13
+#define CATALYST_VMCALL_FREE_PAGES					0x14
 
 ///////////////////////////////////////////////
 ////				Structs				   ////
@@ -69,6 +73,12 @@ typedef struct {
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_CPU;
 
 typedef struct {
+	CHAR8 Sign[5];
+	UINTN Pages;
+	UINTN Size;
+} POOL_HEADER;
+
+typedef struct {
 	struct {
 		__attribute__((aligned(4096))) X86_IDT_ENTRY	Idt[256];
 		__attribute__((aligned(4096))) X86_GDT_ENTRY	Gdt[8192];
@@ -93,8 +103,8 @@ typedef struct {
 		UINT32 EpdeCount;
 		UINT32 EpteCount;
 
-		__attribute__((aligned(4096))) PML4         IdentityPml4[512];
-		__attribute__((aligned(4096))) PDPE_LARGE         IdentityPdpe[512];
+		__attribute__((aligned(4096))) PML4				IdentityPml4[512];
+		__attribute__((aligned(4096))) PDPE_LARGE       IdentityPdpe[512];
 
 		__attribute__((aligned(4096))) EPTP				Eptp;
 		__attribute__((aligned(4096))) EPT_PML4			Epml4[512];
@@ -111,7 +121,7 @@ typedef struct {
 			//
 			UINTN MapKey;
 
-			UINT8 MemoryBitmap[MAXIMUM_GUEST_ALLOCATIONS];
+			UINT8 MemoryBitmap[MAXIMUM_GUEST_ALLOCATIONS / 8];
 			UINTN TotalPages;
 			UINTN NextFreeHint;
 		} Memory;

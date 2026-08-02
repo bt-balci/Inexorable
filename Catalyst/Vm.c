@@ -290,6 +290,18 @@ VmExitHandler(
 		case CATALYST_VMCALL_EXIT_BOOT_SERVICES:
 			FirmwareExitBootServices(Cpu);
 			break;
+		case CATALYST_VMCALL_FREE_POOL:
+			FirmwareFreePool(Cpu);
+			break;
+		case CATALYST_VMCALL_FREE_PAGES:
+			FirmwareFreePages(Cpu);
+			break;
+		case CATALYST_VMCALL_ALLOCATE_POOL:
+			FirmwareAllocatePool(Cpu);
+			break;
+		case CATALYST_VMCALL_ALLOCATE_PAGES:
+			FirmwareAllocatePages(Cpu);
+			break;
 		default:
 			Cpu->Context.Rax = EFI_NOT_FOUND;
 		}

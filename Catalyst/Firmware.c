@@ -1,5 +1,6 @@
 #include <Uefi.h>
 #include <Library/BaseLib.h>
+#include <Library/BaseMemoryLib.h>
 
 #include "Efi.h"
 #include "Memory.h"
@@ -655,11 +656,46 @@ FindFreePages(
 STATIC
 EFI_STATUS
 EFIAPI
-FreeGuestPages(
+AllocatePool(
+	IN UINTN	Size,
+	OUT UINT64*	Buffer
+) {
+	UINTN RealSize = Size + sizeof(POOL_HEADER);
+	UINT64 Base = 0;
+	UINTN Pages = EFI_SIZE_TO_PAGES(Size);
+	EFI_STATUS Status = FindFreePages(AllocateAnyPages, Pages, &Base);
+	if (EFI_ERROR(Status)) return Status;
+
+	POOL_HEADER* Header;
+	//
+	// Maybe we should copy instead of translating?
+	//
+	if (!TranslateGuestPhysicalToHostPhysical(Base << EFI_PAGE_SHIFT, (VOID**)&Header)) {
+		//
+		// Must not fail.
+		//
+		return EFI_DEVICE_ERROR;
+	}
+
+	//
+	// We have to check this is indeed a pool allocation.
+	//
+	CopyMem(Header->Sign, "POOL", 5);
+
+	Header->Pages = Pages;
+	Header->Size = Size;
+
+	*Buffer = (UINT64)(Base << EFI_PAGE_SHIFT) + sizeof(POOL_HEADER);
+	return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+FreePages(
 	IN UINT64	BasePage,
 	IN UINTN	Pages
-)
-{
+) {
 	for (UINT64 i = BasePage; i < BasePage + Pages; i++) {
 		UINT64 Byte = i / 8;
 		UINT8 Bit = i % 8;
@@ -668,6 +704,28 @@ FreeGuestPages(
 	if (BasePage < g_VmState.Firmware.Memory.NextFreeHint) g_VmState.Firmware.Memory.NextFreeHint = BasePage;
 	return EFI_SUCCESS;
 }
+
+STATIC
+EFI_STATUS
+EFIAPI
+FreePool(
+	IN UINT64 Buffer
+) {
+	POOL_HEADER* Header = (POOL_HEADER*)(Buffer - sizeof(POOL_HEADER));
+	if (!TranslateGuestPhysicalToHostPhysical((Buffer) << EFI_PAGE_SHIFT, (VOID**)&Header)) {
+		//
+		// Must not fail.
+		//
+		return EFI_DEVICE_ERROR;
+	}
+
+	if (CompareMem(Header->Sign, "POOL", 5) != 0) {
+		return EFI_INVALID_PARAMETER;
+	}
+
+	return FreePages(((UINT64)Header) >> 12, Header->Pages);
+}
+
 
 VOID
 EFIAPI
@@ -690,7 +748,7 @@ FirmwareAllocatePages(
 
 	if (EFI_ERROR(Cpu->Context.Rax)) return;
 
-	if (CopyToGuest(Cpu->ExtendedContext.Cr3, Allocated, OutPtr, sizeof(Allocated))) return;
+	if (CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Allocated, OutPtr, sizeof(Allocated))) return;
 
 EndPageFault:
 	{
@@ -698,4 +756,48 @@ EndPageFault:
 		InjectEvent(Error.All, TRUE, ExceptionInterruptTypePageFault,
 			InterruptionTypeHardwareException, TRUE);
 	}
+}
+
+VOID
+EFIAPI
+FirmwareFreePages(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+) {
+	EFI_PHYSICAL_ADDRESS Address = Cpu->Context.Rcx;
+	UINTN Pages = Cpu->Context.Rdx;
+
+	Cpu->Context.Rax = FreePages((UINT64)Address, Pages);
+}
+
+VOID
+EFIAPI
+FirmwareAllocatePool(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+) {
+	UINTN Size = Cpu->Context.Rdx;
+	UINT64 OutPtr = Cpu->Context.R8;
+
+	UINT64 Pages = 0;
+	Cpu->Context.Rax = AllocatePool(Size, &Pages);
+
+	if (EFI_ERROR(Cpu->Context.Rax)) return;
+
+	if (CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Pages, OutPtr, sizeof(Pages))) return;
+
+EndPageFault:
+	{
+		PAGE_FAULT_ERROR_CODE Error = { .Write = 0 };
+		InjectEvent(Error.All, TRUE, ExceptionInterruptTypePageFault,
+			InterruptionTypeHardwareException, TRUE);
+	}
+}
+
+VOID
+EFIAPI
+FirmwareFreePool(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+) {
+	UINT64 Buffer = Cpu->Context.Rcx;
+
+	Cpu->Context.Rax = FreePool(Buffer);
 }

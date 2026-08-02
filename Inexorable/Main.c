@@ -8,6 +8,7 @@
 #include "Time.h"
 #include "Misc.h"
 #include "VirtualMemory.h"
+#include "Memory.h"
 
 EFI_SYSTEM_TABLE		gST = { 0 };
 EFI_BOOT_SERVICES	    gBS = { 0 };
@@ -49,5 +50,10 @@ UefiMain(
 	// Setup boot services.
 	//
 	gBS.ExitBootServices			= IxExitBootServices;
-	gB
+
+	gBS.AllocatePages				= IxAllocatePages;
+	gBS.FreePages					= IxFreePages;
+
+	gBS.AllocatePool				= IxAllocatePool;
+	gBS.FreePool					= IxFreePool;
 }

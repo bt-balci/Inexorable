@@ -392,6 +392,18 @@ MapMemory(
 	DebugPrint0402("Total of 0x%p bytes of contiguous address space for the guest\n", TotalBytes);
 
 	//
+	// Setup guest firmware memory.
+	//
+	g_VmState.Firmware.Memory.TotalPages = EFI_SIZE_TO_PAGES(TotalBytes);
+
+	//
+	// First 10 (* 10) pages are used already. They are not free.
+	//
+	for (UINT32 i = 0; i < 100; i++) {
+		g_VmState.Firmware.Memory.MemoryBitmap[i] = MAX_UINT8;
+	}
+
+	//
 	// Forcefully map the host physical memory holding our Guest Page Tables
 	// into the EPT. We will identity map them (GPA == HPA) so we can safely
 	// pass their HPA directly to GUEST_CR3. (200 IQ, for now. Considering that we are above the 4GB but I can't be bothered.)

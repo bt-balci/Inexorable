@@ -193,6 +193,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.c" />
+    <ClCompile Include="Memory.c" />
     <ClCompile Include="Misc.c" />
     <ClCompile Include="Time.c" />
     <ClCompile Include="Variable.c" />
@@ -201,6 +202,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h" />
+    <ClInclude Include="Memory.h" />
     <ClInclude Include="Misc.h" />
     <ClInclude Include="Time.h" />
     <ClInclude Include="Util.h" />
