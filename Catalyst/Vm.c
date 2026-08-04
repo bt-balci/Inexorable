@@ -305,6 +305,15 @@ VmExitHandler(
 		case CATALYST_VMCALL_GET_MEMORY_MAP:
 			FirmwareGetMemoryMap(Cpu);
 			break;
+		case CATALYST_VMCALL_HANDLE_PROTOCOL:
+			FirmwareHandleProtocol(Cpu);
+			break;
+		case CATALYST_VMCALL_LOCATE_PROTOCOL:
+			FirmwareLocateProtocol(Cpu);
+			break;
+		case CATALYST_VMCALL_EXECUTE_PROTOCOL:
+			FirmwareExecuteProtocol(Cpu);
+			break;
 		default:
 			Cpu->Context.Rax = EFI_NOT_FOUND;
 		}
@@ -319,7 +328,6 @@ VmExitHandler(
 		// Unknown exit reason. Fatal.
 		//
 		Borked = TRUE;
-		//
 		break;
 	}
 

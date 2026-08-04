@@ -479,7 +479,7 @@ UefiMain(
 	//
 	// VMX must be enabled.
 	// If the VMX is enabled but BIOS didn't set the lock bit, then screw your BIOS (or OVMF for this context. No don't screw OVMF. It's cool).
-	// Update: Screw OVMF and whoever decided to put page tables in EfiConventionalMemory. Shit took me 4 hours to debug.
+	// Update: Screw OVMF and whoever decided to put page tables in EfiConventionalMemory. It took me 4 hours to debug.
 	//
 	ASSERT(IsVmxEnabled());
 

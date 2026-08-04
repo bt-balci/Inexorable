@@ -3,6 +3,7 @@
 #include <Library/BaseMemoryLib.h>
 #include <Library/BaseLib.h>
 #include <Library/PrintLib.h>
+#include <Protocol/GraphicsOutput.h>
 
 #include "Efi.h"
 #include "Util.h"
@@ -16,6 +17,20 @@
 EFI_SYSTEM_TABLE		gST = { 0 };
 EFI_BOOT_SERVICES	    gBS = { 0 };
 EFI_RUNTIME_SERVICES	gRT = { 0 };
+
+VOID
+EFIAPI
+TestMain(
+	VOID
+) {
+	EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = NULL;
+
+	EFI_STATUS Status = gBS.LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (VOID**)&Gop);
+	if (EFI_ERROR(Status)) {
+		DebugPrint0402("Failed to locate Graphics Output Protocol: %r\n", Status);
+		return;
+	}
+}
 
 VOID
 EFIAPI
@@ -92,4 +107,6 @@ UefiMain(
 	// Who uses this dude?
 	// 
 	//gBS.GetNextMonotonicCount		= IxGetNextHighMonotonicCount;
+
+	TestMain();
 }

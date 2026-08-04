@@ -142,7 +142,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf -fno-asynchronous-unwind-tables -fno-unwind-tables %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -fno-asynchronous-unwind-tables -fno-unwind-tables -fpermissive %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
@@ -173,7 +173,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
-      <AdditionalOptions>-gdwarf -fno-asynchronous-unwind-tables -fno-unwind-tables %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>-gdwarf -fno-asynchronous-unwind-tables -fno-unwind-tables -fpermissive %(AdditionalOptions)</AdditionalOptions>
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <ExceptionHandling>false</ExceptionHandling>
     </ClCompile>
