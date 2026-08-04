@@ -10,16 +10,15 @@
 
 #define FIRMWARE_IMAGE_BASE			0x1000
 
-//
-// In page counts. (E.g. 4 = 0x4000 bytes)
-//
-#define BSP_INITIAL_STACK_SIZE		4
+#define BSP_INITIAL_STACK_SIZE		0x4000
 
 #define HOST_STACK_SIZE				0x4000
 
 #define CONFIG_CPU_COUNT			4
 
 #define MAXIMUM_GUEST_ALLOCATIONS	1024
+
+#define HOST_RESERVED_HEAP_SIZE		SIZE_4MB
 
 ///////////////////////////////////////////////
 ////				VMCALLs 			   ////
@@ -121,6 +120,7 @@ typedef struct {
 
 	struct {
 		BOOLEAN ExitedBootServices;
+		__attribute__((aligned(16))) UINT8 GuestInitialStack[BSP_INITIAL_STACK_SIZE];
 		struct {
 			//
 			// Do we really need this guy?

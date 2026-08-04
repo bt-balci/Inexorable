@@ -304,13 +304,13 @@ MapSinglePage(
 	//
 	// PDPT Level
 	//
-	EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
+	EPT_PDPTE* Epdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
 
-	if (!Pdpt->Present) {
-		Pdpt->Execute = TRUE;
-		Pdpt->Write = TRUE;
-		Pdpt->Read = TRUE;
-		Pdpt->ExecuteUser = TRUE;
+	if (!Epdpt->Present) {
+		Epdpt->Execute = TRUE;
+		Epdpt->Write = TRUE;
+		Epdpt->Read = TRUE;
+		Epdpt->ExecuteUser = TRUE;
 
 		if (g_VmState.AddressSpace.EpdeCount >= 512) {
 			DebugPrint0402("g_EpdeCount is bigger than 512. Borked\n");
@@ -318,8 +318,8 @@ MapSinglePage(
 		}
 		UINT32 PdPoolIndex = g_VmState.AddressSpace.EpdeCount++;
 
-		Pdpt->PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.Epde[PdPoolIndex][0]) >> 12;
-		Pdpt->Present = TRUE;
+		Epdpt->PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.Epde[PdPoolIndex][0]) >> 12;
+		Epdpt->Present = TRUE;
 		//DebugPrint0402("EPT_PDPTE = 0x%p at %p\n", Pdpt->All, Pdpt);
 	}
 
@@ -355,13 +355,13 @@ MapSinglePage(
 	//
 	// PT Level (Fall through for 4KB pages)
 	//
-	EPT_PDE* NonLargePd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
+	EPT_PDE* Epd = &(((EPT_PDE*)(Epdpt->PhysicalAddress << 12))[PdIdx]);
 
-	if (!NonLargePd->Present) {
-		NonLargePd->Execute = TRUE;
-		NonLargePd->Write = TRUE;
-		NonLargePd->Read = TRUE;
-		NonLargePd->ExecuteUser = TRUE;
+	if (!Epd->Present) {
+		Epd->Execute = TRUE;
+		Epd->Write = TRUE;
+		Epd->Read = TRUE;
+		Epd->ExecuteUser = TRUE;
 
 		//
 		// Hmm. Can we get borked? Better log than hang.
@@ -373,28 +373,30 @@ MapSinglePage(
 
 		UINT32 PtPoolIndex = g_VmState.AddressSpace.EpteCount++;
 
-		NonLargePd->PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.Epte[PtPoolIndex][0]) >> 12;
-		NonLargePd->Present = TRUE;
+		Epd->PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.Epte[PtPoolIndex][0]) >> 12;
+		Epd->Present = TRUE;
 
 		//DebugPrint0402("EPT_PDE = 0x%p at %p. EPTE count = %d\n", NonLargePd->All, NonLargePd, g_EpteCount);
 	}
 
-	EPT_PTE* Pt = &(((EPT_PTE*)(NonLargePd->PhysicalAddress << 12))[PtIdx]);
-	if (Pt->Present) {
+	EPT_PTE* Ept = &(((EPT_PTE*)(Epd->PhysicalAddress << 12))[PtIdx]);
+	if (Ept->Present) {
+		DebugPrint0402("Ept is already present. Failed to map. GPA = 0x%p to HPA = 0x%p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d, Ept = 0x%p\n",
+			GuestPhysical, HostPhysical, Big, Pml4Idx, PdptIdx, PdIdx, PtIdx, Ept->All);
 		return FALSE;
 	}
 
 	//
 	// Set the 4KB page entry
 	//
-	Pt->EptMemoryType = 6;
-	Pt->Execute = TRUE;
-	Pt->Write = TRUE;
-	Pt->Read = TRUE;
-	Pt->ExecuteUser = TRUE;
+	Ept->EptMemoryType = 6;
+	Ept->Execute = TRUE;
+	Ept->Write = TRUE;
+	Ept->Read = TRUE;
+	Ept->ExecuteUser = TRUE;
 
-	Pt->PhysicalAddress = HostPhysical >> 12;
-	Pt->Present = TRUE;
+	Ept->PhysicalAddress = HostPhysical >> 12;
+	Ept->Present = TRUE;
 
 	//DebugPrint0402("EPT_PTE = 0x%p at %p\n", Pt->All, Pt);
 	return TRUE;

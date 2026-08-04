@@ -1287,10 +1287,14 @@ EFIAPI
 FirmwareHandleProtocol(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 ) {
+	DebugPrint0402("Handle=0x%p, GuidPtr=0x%p, InterfacePtr=0x%p\n", (EFI_HANDLE)Cpu->Context.Rcx, Cpu->Context.Rdx, Cpu->Context.R8);
+
 	if (g_VmState.Firmware.ExitedBootServices) {
 		//
 		// Guest borked itself.
 		//
+		DebugPrint0402("Boot services exited, returning error.\n");
+		Cpu->Context.Rax = EFI_UNSUPPORTED;
 		return;
 	}
 
@@ -1303,15 +1307,24 @@ FirmwareHandleProtocol(
 	UINT64 InterfacePtr = Cpu->Context.R8;
 	VOID* Interface = NULL;
 
-	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Guid, GuidPtr, sizeof(Guid))) goto EndPageFault;
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Guid, GuidPtr, sizeof(Guid))) {
+		DebugPrint0402("Failed to copy GUID from guest address 0x%p\n", GuidPtr);
+		goto EndPageFault;
+	}
+
+	DebugPrint0402("GUID = %g\n", &Guid);
 
 	Cpu->Context.Rax = gBS->HandleProtocol(Handle, &Guid, &Interface);
+
+	DebugPrint0402("Host HandleProtocol returned %r, Interface = 0x%p\n", Cpu->Context.Rax, Interface);
 
 	if (EFI_ERROR(Cpu->Context.Rax)) {
 		return;
 	}
 
 	EFI_STATUS Status = ReplicateProtocol(Cpu->ExtendedContext.Cr3, &Guid, Interface, &GuestInterface);
+	DebugPrint0402("ReplicateProtocol returned %r, GuestInterface = 0x%px\n", Status, GuestInterface);
+
 	if (EFI_ERROR(Status)) {
 		Cpu->Context.Rax = Status;
 		// We should... actually bork right here. This shouldn't happen.
@@ -1321,10 +1334,17 @@ FirmwareHandleProtocol(
 	//
 	// Copy back the new replicated protocol ptr that we allocated in guest's address space.
 	//
-	if (CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&GuestInterface, InterfacePtr, sizeof(GuestInterface))) return;
+	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&GuestInterface, InterfacePtr, sizeof(GuestInterface))) {
+		DebugPrint0402("Failed to write guest interface pointer to 0x%p\n", InterfacePtr);
+		goto EndPageFault;
+	}
+
+	return;
 
 EndPageFault:
 	{
+		Cpu->Context.Rax = EFI_INVALID_PARAMETER;
+
 		PAGE_FAULT_ERROR_CODE Error = { .Write = 0 };
 		InjectEvent(Error.All, TRUE, ExceptionInterruptTypePageFault,
 			InterruptionTypeHardwareException, TRUE);
@@ -1336,7 +1356,11 @@ EFIAPI
 FirmwareLocateProtocol(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 ) {
+	DebugPrint0402("GuidPtr=0x%p, RegistrationPtr=0x%p, InterfacePtr=0x%p\n", Cpu->Context.Rcx, Cpu->Context.Rdx, Cpu->Context.R8);
+
 	if (g_VmState.Firmware.ExitedBootServices) {
+		DebugPrint0402("Boot services exited, returning error.\n");
+		Cpu->Context.Rax = EFI_UNSUPPORTED;
 		return;
 	}
 
@@ -1351,20 +1375,33 @@ FirmwareLocateProtocol(
 	// I think we will ignore registration for now.
 	//
 
-	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Guid, GuidPtr, sizeof(Guid))) goto EndPageFault;
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Guid, GuidPtr, sizeof(Guid))) {
+		DebugPrint0402("Failed to copy GUID from guest address 0x%p\n", GuidPtr);
+		goto EndPageFault;
+	}
+	DebugPrint0402("GUID = %g\n", &Guid);
 
 	Cpu->Context.Rax = gBS->LocateProtocol(&Guid, NULL, &Interface);
+	DebugPrint0402("Host LocateProtocol returned %r, Interface = 0x%p\n", Cpu->Context.Rax, Interface);
 
 	EFI_STATUS Status = ReplicateProtocol(Cpu->ExtendedContext.Cr3, &Guid, Interface, &GuestInterface);
+	DebugPrint0402("ReplicateProtocol returned %r, GuestInterface = 0x%p\n", Status, GuestInterface);
 	if (EFI_ERROR(Status)) {
 		Cpu->Context.Rax = Status;
 		return;
 	}
 
-	if (CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&GuestInterface, InterfacePtr, sizeof(GuestInterface))) return;
+	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&GuestInterface, InterfacePtr, sizeof(GuestInterface))) {
+		DebugPrint0402("Failed to write guest interface pointer to 0x%p\n", InterfacePtr);
+		goto EndPageFault;
+	}
+
+	return;
 
 EndPageFault:
 	{
+		Cpu->Context.Rax = EFI_INVALID_PARAMETER;
+
 		PAGE_FAULT_ERROR_CODE Error = { .Write = 0 };
 		InjectEvent(Error.All, TRUE, ExceptionInterruptTypePageFault,
 			InterruptionTypeHardwareException, TRUE);

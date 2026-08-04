@@ -72,18 +72,18 @@ PrepareProcessors(
 	{
 		CATALYST_VIRTUAL_CPU* Cpu = &g_VirtualProcessors[0];
 		Cpu->Context.Rip = (UINT64)GuestRip;
+		Cpu->Context.Rsp = (UINT64)&g_VmState.Firmware.GuestInitialStack;
 
-		//
-		// Map the initial guest stack.
-		//
-		Status = gBS->AllocatePages(AllocateAnyPages, EfiRuntimeServicesData, BSP_INITIAL_STACK_SIZE, (EFI_PHYSICAL_ADDRESS*)&Cpu->Context.Rsp);
-		if (EFI_ERROR(Status)) {
-			DebugPrint0402("Failed to allocate memory for guest's initial stack: %r\n", Status);
-			return Status;
-		}
+		for (UINT32 i = 0; i < EFI_SIZE_TO_PAGES(BSP_INITIAL_STACK_SIZE); i++) {
+			//
+			// They can be same variable but ok.
+			//
+			UINT64 Host = Cpu->Context.Rsp + (i * 0x1000);
+			UINT64 Guest = Cpu->Context.Rsp + (i * 0x1000);
 
-		for (UINT32 i = 0; i < BSP_INITIAL_STACK_SIZE; i++) {
-			if (!MapSinglePage(Cpu->Context.Rsp + (i * 0x1000), Cpu->Context.Rsp + (i * 0x1000), FALSE)) {
+			DebugPrint0402("Mapping initial BSP stack. GPA = 0x%p, HPA = 0x%p\n", Host, Guest);
+
+			if (!MapSinglePage(Guest, Host, FALSE)) {
 				DebugPrint0402("Failed to map BSP initial stack!\n");
 				return EFI_NO_MAPPING;
 			}
@@ -104,14 +104,17 @@ PrepareProcessors(
 	// Warning: This will INEVITABLY BREAK if the Catalyst is not mapped over the 4GB limit and guest has more than 4GB memory. 
 	//
 	g_VmState.SharedState.GdtBase = (VOID*)Descriptor.Base;
+	DebugPrint0402("Mapping GdtBase. GPA = 0x%p, HPA = 0x%p\n", g_VmState.SharedState.GdtBase, g_VmState.SharedState.GdtBase);
 	MapSinglePage((UINT64)g_VmState.SharedState.GdtBase, (UINT64)g_VmState.SharedState.GdtBase, FALSE);
 
 	g_VmState.SharedState.TssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
+	DebugPrint0402("Mapping TssBase. GPA = 0x%p, HPA = 0x%p\n", g_VmState.SharedState.TssBase, g_VmState.SharedState.TssBase);
 	MapSinglePage((UINT64)g_VmState.SharedState.TssBase, (UINT64)g_VmState.SharedState.TssBase, FALSE);
 
 	AsmReadIdtr(&Descriptor);
 
 	g_VmState.SharedState.IdtBase = (VOID*)Descriptor.Base;
+	DebugPrint0402("Mapping IdtBase. GPA = 0x%p, HPA = 0x%p\n", g_VmState.SharedState.IdtBase, g_VmState.SharedState.IdtBase);
 	MapSinglePage((UINT64)g_VmState.SharedState.IdtBase, (UINT64)g_VmState.SharedState.IdtBase, FALSE);
 
 	g_VmState.SharedState.TrSelector		= AsmReadTr();
@@ -364,6 +367,7 @@ MapMemory(
 	DebugPrint0402("Mapping out free memory...\n");
 
 	UINT64 TotalBytes = 0;
+	BOOLEAN HostReserved = FALSE;
 
 	//
 	// We will map everything from 0. As if there is contiguous, linear memory for the guest.
@@ -381,14 +385,40 @@ MapMemory(
 			UINT64 PhysicalStart = Desc->PhysicalStart;
 			UINT64 NumberOfPages = Desc->NumberOfPages;
 			
-			DebugPrint0402("Found memory at %p for %d pages. Mapping to %p\n", PhysicalStart, NumberOfPages, g_CurrentGuestPhysicalAddress);
-			
+			//
+			// We are mapping EfiConventionalMemory. Which means free memory. Whenever we do AllocatePool or AllocatePages on host's side, we are stealing memory from guest.
+			// So we gotta reserve for host.
+			//
+			if (!HostReserved) {
+				if (EFI_PAGES_TO_SIZE(NumberOfPages) > HOST_RESERVED_HEAP_SIZE) {
+
+					DebugPrint0402("Reserved host heap starting from 0x%p for %d pages\n", PhysicalStart, EFI_SIZE_TO_PAGES(HOST_RESERVED_HEAP_SIZE));
+
+					//
+					// Reserve 4 MBs
+					//
+					PhysicalStart += HOST_RESERVED_HEAP_SIZE;
+					NumberOfPages -= EFI_SIZE_TO_PAGES(HOST_RESERVED_HEAP_SIZE);
+					HostReserved = TRUE;
+				}
+			}
+
+			DebugPrint0402("Found memory at 0x%p for %d pages. Mapping to 0x%p\n", PhysicalStart, NumberOfPages, g_CurrentGuestPhysicalAddress);
+
+			Status = gBS->AllocatePages(AllocateAddress, EfiRuntimeServicesData, NumberOfPages, (EFI_PHYSICAL_ADDRESS*)&PhysicalStart);
+			if (EFI_ERROR(Status)) {
+				DebugPrint0402("Failed to reserve pages for guest. %r\n", Status);
+				goto Skip;
+			}
+
 			if (!MapPagesLinear(PhysicalStart, NumberOfPages, &g_CurrentGuestPhysicalAddress)) {
 				DebugPrint0402("Failed to map %d pages HPA 0x%p to GPA 0x%p\n", NumberOfPages, PhysicalStart, g_CurrentGuestPhysicalAddress);
 			}
 
 			DebugPrint0402("Mapped %d pages, new cursor: %p\n", NumberOfPages, g_CurrentGuestPhysicalAddress);
-			TotalBytes += PhysicalStart * 0x1000;
+
+			Skip:
+			TotalBytes += EFI_PAGES_TO_SIZE(NumberOfPages);
 		}
 
 		Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Desc + DescriptorSize);
