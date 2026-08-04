@@ -46,6 +46,11 @@
 #define CATALYST_VMCALL_FREE_PAGES					0x14
 #define CATALYST_VMCALL_GET_MEMORY_MAP				0x15
 
+#define CATALYST_VMCALL_OPEN_PROTOCOL				0x16
+#define CATALYST_VMCALL_LOCATE_PROTOCOL				0x17
+#define CATALYST_VMCALL_HANDLE_PROTOCOL				0x18
+#define CATALYST_VMCALL_EXECUTE_PROTOCOL			0x19
+
 ///////////////////////////////////////////////
 ////				Structs				   ////
 ///////////////////////////////////////////////

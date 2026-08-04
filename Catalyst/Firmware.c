@@ -5,6 +5,21 @@
 #include "Efi.h"
 #include "Memory.h"
 #include "Vm.h"
+#include "Firmware.h"
+
+STATIC PROTOCOL_REPLICA_INFO mReplicaTable[] = {
+#define FUNCTION(Name, Offset)  Offset,
+#define PROTOCOL_FUNC(Name, Type, GuidVar, Funcs...)  \
+	{ .Guid = &GuidVar,                                 \
+	  .Size = sizeof(Type),                             \
+	  .NumFuncs = (sizeof((UINTN[]) { Funcs }) / sizeof(UINTN)),  \
+	  .Offsets = { Funcs } },
+	FOR_EACH_PROTOCOL_FUNCTION(PROTOCOL_FUNC, FUNCTION)
+#undef PROTOCOL_FUNC
+#undef FUNCTION
+};
+
+CONST UINTN mReplicaTableCount = sizeof(mReplicaTable) / sizeof(mReplicaTable[0]);
 
 ///////////////////////////////////////////////
 ////		     Runtime Services 		   ////
@@ -13,18 +28,18 @@
 VOID
 EFIAPI
 FirmwareGetVariable(
-	IN OUT CATALYST_VIRTUAL_CPU*	Cpu
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 ) {
 	//
 	// Arguments.
 	//
-	UINTN NameLength	= 0;
-	CHAR16* Name		= NULL;
+	UINTN NameLength = 0;
+	CHAR16* Name = NULL;
 	EFI_GUID VendorGuid = { 0 };
-	UINT32 Attributes	= 0;
-	UINTN DataSize		= 0;
-	VOID* Data			= NULL;
-	UINT64 DataPtr		= Cpu->Context.R10;
+	UINT32 Attributes = 0;
+	UINTN DataSize = 0;
+	VOID* Data = NULL;
+	UINT64 DataPtr = Cpu->Context.R10;
 
 	//
 	// Translate arguments.
@@ -44,9 +59,9 @@ FirmwareGetVariable(
 	//
 	// These are mandatory.
 	//
-	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, Name,			Cpu->Context.Rcx,	NameLength))			goto EndPageFault;
-	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &VendorGuid,	Cpu->Context.Rdx,	sizeof(VendorGuid)))	goto EndPageFault;
-	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &DataSize,		Cpu->Context.R9,	sizeof(DataSize)))		goto EndPageFault;
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, Name, Cpu->Context.Rcx, NameLength))			goto EndPageFault;
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &VendorGuid, Cpu->Context.Rdx, sizeof(VendorGuid)))	goto EndPageFault;
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &DataSize, Cpu->Context.R9, sizeof(DataSize)))		goto EndPageFault;
 
 	//
 	// Data is OPTIONAL, can be null.
@@ -126,18 +141,12 @@ FirmwareSetVariable(
 	UINTN       DataSize = 0;
 	VOID* Data = NULL;
 
-	//
-	// Extract arguments.
-	//
 	UINT64  NamePtr = Cpu->Context.Rcx;
 	UINT64  GuidPtr = Cpu->Context.Rdx;
 	UINT64  DataPtr = Cpu->Context.R10;
 	DataSize = Cpu->Context.R9;
 	Attributes = (UINT32)Cpu->Context.R8;
 
-	//
-	// Copy mandatory string.
-	//
 	NameLength = StrSizeFromGuest(Cpu->ExtendedContext.Cr3, NamePtr);
 	if (NameLength == MAX_UINTN) {
 		Cpu->Context.Rax = EFI_INVALID_PARAMETER;
@@ -154,16 +163,11 @@ FirmwareSetVariable(
 		goto EndPageFault;
 	}
 
-	//
-	// Copy VendorGuid (mandatory, 16 bytes).
-	//
+
 	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &VendorGuid, GuidPtr, sizeof(EFI_GUID))) {
 		goto EndPageFault;
 	}
 
-	//
-	// Copy Data buffer if DataSize > 0.
-	//
 	if (DataSize > 0) {
 		Status = gBS->AllocatePool(EfiRuntimeServicesData, DataSize, (VOID**)&Data);
 		if (EFI_ERROR(Status)) {
@@ -175,9 +179,7 @@ FirmwareSetVariable(
 		}
 	}
 
-	//
-	// Call host SetVariable.
-	//
+
 	Cpu->Context.Rax = gRT->SetVariable(Name, &VendorGuid, Attributes, DataSize, Data);
 
 	goto End;
@@ -200,46 +202,30 @@ FirmwareGetNextVariableName(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 )
 {
-	UINTN       NameSize = 0;   // local copy of *VariableNameSize
+	UINTN       NameSize = 0;
 	CHAR16*		Name = NULL;
 	EFI_GUID    VendorGuid = { 0 };
 	BOOLEAN     HaveGuid = FALSE;
 
-	//
-	// Arguments: RCX = VariableNameSize (ptr to UINTN)
-	//            RDX = VariableName (ptr to CHAR16 buffer)
-	//            R8  = VendorGuid (ptr to EFI_GUID, may be NULL)
-	//
 	UINT64  SizePtr = Cpu->Context.Rcx;
 	UINT64  NamePtr = Cpu->Context.Rdx;
 	UINT64  GuidPtr = Cpu->Context.R8;
 
-	//
-	// 1. Read the current *VariableNameSize.
-	//
 	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &NameSize, SizePtr, sizeof(UINTN))) {
 		goto EndPageFault;
 	}
 
-	//
-	// 2. Allocate host buffer for VariableName based on NameSize.
-	//
 	EFI_STATUS Status = gBS->AllocatePool(EfiRuntimeServicesData, NameSize, (VOID**)&Name);
 	if (EFI_ERROR(Status)) {
 		Cpu->Context.Rax = Status;
 		return;
 	}
 
-	//
-	// 3. Copy the current VariableName string from guest (it must be null‑terminated).
-	//
+
 	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, Name, NamePtr, NameSize)) {
 		goto EndPageFault;
 	}
 
-	//
-	// 4. If VendorGuid pointer is not NULL, copy the input GUID (filter).
-	//
 	if (GuidPtr != 0) {
 		if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &VendorGuid, GuidPtr, sizeof(EFI_GUID))) {
 			goto EndPageFault;
@@ -247,32 +233,22 @@ FirmwareGetNextVariableName(
 		HaveGuid = TRUE;
 	}
 
-	//
-	// 5. Call host GetNextVariableName.
-	//
 	Cpu->Context.Rax = gRT->GetNextVariableName(&NameSize, Name,
 		HaveGuid ? &VendorGuid : NULL);
 
 	//
-	// 6. Always write back the (possibly updated) NameSize.
+	// NameSize may be updated.
 	//
 	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, &NameSize, SizePtr, sizeof(UINTN))) {
 		goto EndPageFault;
 	}
 
-	//
-	// 7. If the call succeeded, copy back the new VariableName and VendorGuid.
-	//
+
 	if (!EFI_ERROR(Cpu->Context.Rax)) {
-		//
-		// Write back the new variable name (exactly NameSize bytes).
-		//
 		if (!CopyToGuest(Cpu->ExtendedContext.Cr3, Name, NamePtr, NameSize)) {
 			goto EndPageFault;
 		}
-		//
-		// Write back VendorGuid if the guest supplied a pointer.
-		//
+
 		if (GuidPtr != 0) {
 			if (!CopyToGuest(Cpu->ExtendedContext.Cr3, &VendorGuid, GuidPtr, sizeof(EFI_GUID))) {
 				goto EndPageFault;
@@ -304,12 +280,6 @@ FirmwareQueryVariableInfo(
 	UINT64  RemainingVariableStorageSize = 0;
 	UINT64  MaximumVariableSize = 0;
 
-	//
-	// Arguments: RCX = Attributes (UINT32, passed by value),
-	//            RDX = MaximumVariableStorageSize,
-	//            R8  = RemainingVariableStorageSize,
-	//            R9  = MaximumVariableSize
-	//
 	Attributes = (UINT32)Cpu->Context.Rcx;
 	UINT64 MaxStorPtr = Cpu->Context.Rdx;
 	UINT64 RemStorPtr = Cpu->Context.R8;
@@ -359,9 +329,6 @@ FirmwareGetTime(
 	EFI_TIME_CAPABILITIES   Caps;
 	EFI_TIME_CAPABILITIES* CapsPtr = NULL;
 
-	//
-	// Arguments: RCX = Time (OUT), RDX = Capabilities (OUT, OPTIONAL)
-	//
 	UINT64 TimePtr = Cpu->Context.Rcx;
 	UINT64 CapsPtrGuest = Cpu->Context.Rdx;
 
@@ -406,9 +373,6 @@ FirmwareSetTime(
 {
 	EFI_TIME HostTime;
 
-	//
-	// Arguments: RCX = Time (IN)
-	//
 	UINT64 TimePtr = Cpu->Context.Rcx;
 
 	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &HostTime, TimePtr, sizeof(EFI_TIME))) {
@@ -436,9 +400,6 @@ FirmwareGetWakeupTime(
 	BOOLEAN  Pending;
 	EFI_TIME Time;
 
-	//
-	// Arguments: RCX = Enabled (OUT), RDX = Pending (OUT), R8 = Time (OUT)
-	//
 	UINT64 EnabledPtr = Cpu->Context.Rcx;
 	UINT64 PendingPtr = Cpu->Context.Rdx;
 	UINT64 TimePtr = Cpu->Context.R8;
@@ -475,10 +436,6 @@ FirmwareSetWakeupTime(
 	EFI_TIME HostTime;
 	EFI_TIME* TimePtr = NULL;
 
-	//
-	// Arguments: RCX = Enable (BOOLEAN, passed by value),
-	//            RDX = Time (IN, OPTIONAL)
-	//
 	Enable = (BOOLEAN)Cpu->Context.Rcx;
 	UINT64 GuestTimePtr = Cpu->Context.Rdx;
 
@@ -507,10 +464,6 @@ FirmwareGetNextHighMonotonicCount(
 )
 {
 	UINT32 HighCount;
-
-	//
-	// Arguments: RCX = HighCount (OUT)
-	//
 	UINT64 HighCountPtr = Cpu->Context.Rcx;
 
 	Cpu->Context.Rax = gRT->GetNextHighMonotonicCount(&HighCount);
@@ -554,7 +507,7 @@ EFIAPI
 FindFreePages(
 	IN EFI_ALLOCATE_TYPE	AllocationType,
 	IN UINTN				Pages,
-	IN OUT UINT64*			OutPageBase
+	IN OUT UINT64* OutPageBase
 )
 {
 	UINT64 MaxAddrPage = 0;
@@ -580,7 +533,8 @@ FindFreePages(
 		}
 		*OutPageBase = Start;
 		return EFI_SUCCESS;
-	} else if (AllocationType == AllocateMaxAddress) {
+	}
+	else if (AllocationType == AllocateMaxAddress) {
 		//
 		// Input *OutPageBase is the maximum address (byte address).
 		// Convert to page index (round down, ensure >= Pages-1).
@@ -658,7 +612,7 @@ EFI_STATUS
 EFIAPI
 AllocatePool(
 	IN UINTN	Size,
-	OUT UINT64*	Buffer
+	OUT UINT64* Buffer
 ) {
 	UINTN RealSize = Size + sizeof(POOL_HEADER);
 	UINT64 Base = 0;
@@ -719,6 +673,9 @@ FreePool(
 		return EFI_DEVICE_ERROR;
 	}
 
+	//
+	// Make sure this is indeed a POOL.
+	//
 	if (CompareMem(Header->Sign, "POOL", 5) != 0) {
 		return EFI_INVALID_PARAMETER;
 	}
@@ -882,6 +839,135 @@ End:
 	Cpu->Context.Rax = EFI_SUCCESS;
 
 	return;
+
+EndPageFault:
+	{
+		PAGE_FAULT_ERROR_CODE Error = { .Write = 0 };
+		InjectEvent(Error.All, TRUE, ExceptionInterruptTypePageFault,
+			InterruptionTypeHardwareException, TRUE);
+	}
+}
+
+STATIC
+PROTOCOL_REPLICA_INFO*
+FindReplicaInfo(EFI_GUID* Guid)
+{
+	for (UINTN i = 0; i < mReplicaTableCount; i++) {
+		if (CompareGuid(Guid, mReplicaTable[i].Guid)) {
+			return &mReplicaTable[i];
+		}
+	}
+	return NULL;
+}
+
+STATIC
+UINT64
+EFIAPI
+GenerateProtocolCallStub(
+	IN CR3		GuestCr3,
+	IN VOID* HostFunc
+) {
+	UINT64 GuestMem = 0;
+	EFI_STATUS Status = AllocatePool(18, &GuestMem);
+	if (EFI_ERROR(Status)) {
+		return 0;
+	}
+
+	//
+	// INVARIANT: Our pool allocator is a page allocator in disguise. So we can do this trickery.
+	//
+	UINT8* StubPtr = NULL;
+	if (!TranslateGuestAddressToHostAddress(GuestCr3, GuestMem, (VOID**)&StubPtr)) {
+		FreePool(GuestMem);
+		return 0;
+	}
+
+	//
+	// Shellcodemaxxing.
+	//
+	StubPtr[0] = 0x49;					// rex.wb
+	StubPtr[1] = 0xBA;					// mov(abs) r10, imm64
+	*(UINT64*)(StubPtr + 2) = (UINT64)HostFunc;
+	StubPtr[10] = 0xB8;					// mov eax, imm32
+	*(UINT32*)(StubPtr + 11) = CATALYST_VMCALL_EXECUTE_PROTOCOL;
+
+	StubPtr[15] = 0x0F;	// vmcall
+	StubPtr[16] = 0x01;
+	StubPtr[17] = 0xC1;
+
+	StubPtr[18] = 0xC3; // return
+
+	return GuestMem;
+}
+
+STATIC
+EFI_STATUS
+EFIAPI
+ReplicateProtocol(
+	IN CR3			GuestCr3,
+	IN EFI_GUID* Guid,
+	IN VOID* HostInterface,
+	OUT UINT64* GuestInterface
+) {
+	PROTOCOL_REPLICA_INFO* Info = FindReplicaInfo(Guid);
+	if (Info == NULL) {
+		return EFI_NOT_FOUND;
+	}
+
+	//
+	// Allocate pool to hold guest protocol replica.
+	//
+	EFI_STATUS Status = AllocatePool(Info->Size, GuestInterface);
+	if (EFI_ERROR(Status)) {
+		return Status;
+	}
+
+	//
+	// Copy original function to guest.
+	//
+	if (!CopyToGuest(GuestCr3, HostInterface, *GuestInterface, Info->Size)) {
+		return EFI_INVALID_PARAMETER;
+	}
+
+	for (UINT32 i = 0; i < Info->NumFuncs; i++) {
+		UINTN Offset = Info->Offsets[i];
+
+		VOID** HostFuncPtr = (VOID**)((UINT8*)HostInterface + Offset);
+
+		VOID* Stub = GenerateProtocolCallStub(GuestCr3, *HostFuncPtr);
+
+		UINT64 GuestFuncPtr = (UINT64)((UINT8*)*GuestInterface + Offset);
+
+		//
+		// Write the new stub :)
+		//
+		if (!CopyToGuest(GuestCr3, Stub, GuestFuncPtr, sizeof(Stub))) return EFI_INVALID_PARAMETER;
+	}
+
+	return EFI_SUCCESS;
+}
+
+VOID
+EFIAPI
+FirmwareHandleProtocol(
+	IN OUT CATALYST_VIRTUAL_CPU* Cpu
+) {
+	EFI_HANDLE Handle = (EFI_HANDLE)Cpu->Context.Rcx;
+
+	UINT64 GuidPtr = Cpu->Context.Rdx;
+	EFI_GUID Guid = { 0 };
+
+	UINT64 InterfacePtr = Cpu->Context.R8;
+	VOID* Interface = NULL;
+
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Guid, GuidPtr, sizeof(Guid))) goto EndPageFault;
+
+	Cpu->Context.Rax = gBS->HandleProtocol(Handle, &Guid, &Interface);
+
+	if (EFI_ERROR(Cpu->Context.Rax)) {
+		return;
+	}
+
 
 EndPageFault:
 	{

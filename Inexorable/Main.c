@@ -11,6 +11,7 @@
 #include "Misc.h"
 #include "VirtualMemory.h"
 #include "Memory.h"
+#include "Protocol.h"
 
 EFI_SYSTEM_TABLE		gST = { 0 };
 EFI_BOOT_SERVICES	    gBS = { 0 };
@@ -80,9 +81,12 @@ UefiMain(
 	gBS.GetMemoryMap				= IxGetMemoryMap;
 
 	gBS.CalculateCrc32				= IxCalculateCrc32;
-
 	gBS.CopyMem						= IxCopyMem;
 	gBS.SetMem						= IxSetMem;
+
+	gBS.OpenProtocol				= IxOpenProtocol;
+	gBS.LocateProtocol				= IxLocateProtocol;
+	gBS.HandleProtocol				= IxHandleProtocol;
 
 	//
 	// Who uses this dude?
