@@ -2,7 +2,15 @@
 #define _EFI_H_
 
 #include <Uefi.h>
+#include <Protocol/Rng.h>
+#include <Protocol/LoadFile2.h>
 
+#ifndef EXTERNAL_PROTOCOLS_DEFINED
+#define EXTERNAL_PROTOCOLS_DEFINED
+extern GUID gEfiRngProtocolGuid;
+extern GUID gEfiLoadFile2ProtocolGuid;
+extern GUID gEfiBlockIo2ProtocolGuid;
+#endif
 
 //
 // Cringe.

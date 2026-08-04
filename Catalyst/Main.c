@@ -6,12 +6,17 @@
 #include <Protocol/MpService.h>
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
+#include <Protocol/BlockIo2.h>
 #include <IndustryStandard/PeImage.h>
 
 #include "Efi.h"
 #include "x86.h"
 #include "Vm.h"
 #include "Memory.h"
+
+GUID gEfiRngProtocolGuid = EFI_RNG_PROTOCOL_GUID;
+GUID gEfiLoadFile2ProtocolGuid = EFI_LOAD_FILE2_PROTOCOL_GUID;
+GUID gEfiBlockIo2ProtocolGuid = EFI_BLOCK_IO2_PROTOCOL_GUID;
 
 CHAR8* gEfiCallerBaseName = "BT-BALCI";
 

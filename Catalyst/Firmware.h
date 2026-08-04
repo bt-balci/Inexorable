@@ -7,6 +7,7 @@
 #include <Protocol/DevicePathToText.h>
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
+#include <Protocol/BlockIo2.h>
 
 #include "Vm.h"
 
@@ -122,8 +123,15 @@ typedef struct {
 } PROTOCOL_REPLICA_INFO;
 
 #define FOR_EACH_PROTOCOL_FUNCTION(PROTOCOL_FUNC, FUNCTION)                              \
+	PROTOCOL_FUNC(EFI_BLOCK_IO2_PROTOCOL, EFI_BLOCK_IO2_PROTOCOL,						 \
+				gEfiBlockIo2ProtocolGuid,												 \
+		FUNCTION(Reset,			OFFSET_OF(EFI_BLOCK_IO2_PROTOCOL, Reset))				 \
+		FUNCTION(ReadBlocksEx,	OFFSET_OF(EFI_BLOCK_IO2_PROTOCOL, ReadBlocksEx))		 \
+		FUNCTION(WriteBlocksEx,	OFFSET_OF(EFI_BLOCK_IO2_PROTOCOL, WriteBlocksEx))		 \
+		FUNCTION(FlushBlocksEx,	OFFSET_OF(EFI_BLOCK_IO2_PROTOCOL, FlushBlocksEx))		 \
+	)																				     \
 	PROTOCOL_FUNC(EFI_LOADED_IMAGE_PROTOCOL, EFI_LOADED_IMAGE_PROTOCOL,                  \
-				  gEfiLoadedImageProtocolGuid,                                            \
+				  gEfiLoadedImageProtocolGuid,                                           \
 		FUNCTION(Unload, OFFSET_OF(EFI_LOADED_IMAGE_PROTOCOL, Unload))                   \
 	)                                                                                    \
 	PROTOCOL_FUNC(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL,      \
