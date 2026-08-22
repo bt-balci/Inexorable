@@ -10,6 +10,7 @@
 #include <IndustryStandard/PeImage.h>
 
 #include "Efi.h"
+#include "Acpi.h"
 #include "x86.h"
 #include "Vm.h"
 #include "Memory.h"
@@ -378,6 +379,12 @@ MapMemory(
 	DebugPrint0402("MapMemory: Guest CR3 = 0x%p\n", g_VmState.AddressSpace.GuestCr3);
 
 	//
+	// Allocate ACPI tables
+	//
+	Status = GenerateAcpiTables();
+	ASSERT_EFI_ERROR(Status);
+
+	//
 	// Allocate HLT section for APs.
 	//
 	UINT64 ApHaltGpa;
@@ -518,7 +525,7 @@ UefiMain(
 	EFI_STATUS Status = gBS->HandleProtocol(ImageHandle, &gEfiLoadedImageProtocolGuid, (VOID**)&LoadedImage);
 
 	//
-	// We need this for debugging
+	// We need this for debugging. Because qemu gdb does not break when an int3 is addressed. For some reason, of course.
 	//
 	if (Status == EFI_SUCCESS && FALSE) {
 		DebugPrint0402("Catalyst.efi loaded at 0x%p, with size 0x%p", LoadedImage->ImageBase, LoadedImage->ImageSize);
@@ -556,7 +563,7 @@ UefiMain(
 	//
 	Status = MapMemory();
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("UefiMain: FAIL: Failed to map memory: %r\n", Status);
+		DebugPrint0402("UefiMain: FAIL: Cannot map memory: %r\n", Status);
 		return Status;
 	}
 
@@ -566,7 +573,7 @@ UefiMain(
 	VOID* GuestRIP = 0;
 	Status = LoadFirmware(&GuestRIP);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("UefiMain: FAIL: Failed to load firmware: %r\n", Status);
+		DebugPrint0402("UefiMain: FAIL: Cannot load firmware: %r\n", Status);
 		return Status;
 	}
 
@@ -577,7 +584,7 @@ UefiMain(
 	//
 	Status = PrepareProcessors(GuestRIP);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("UefiMain: FAIL: Failed to prepare processors: %r\n", Status);
+		DebugPrint0402("UefiMain: FAIL: Cannot prepare processors: %r\n", Status);
 		return Status;
 	}
 

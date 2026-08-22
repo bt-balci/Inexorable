@@ -1,0 +1,13 @@
+#pragma once
+#include <Uefi.h>
+#include <IndustryStandard/Acpi.h>
+
+///////////////////////////////////////////////
+////				Methods				   ////
+///////////////////////////////////////////////
+
+EFI_STATUS
+EFIAPI
+GenerateAcpiTables(
+	VOID
+);

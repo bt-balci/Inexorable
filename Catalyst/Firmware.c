@@ -911,7 +911,7 @@ FindReplicaInfo(
 		if (CompareGuid(Guid, &mReplicaTable[i].Guid))
 		{
 			DebugPrint0402("FindReplicaInfo: Found protocol at index %d, Size=%d, NumFuncs=%d\n",
-				i, mReplicaTable[i].Size, mReplicaTable[i].NumFuncs);
+				i, mReplicaTable[i].Size, mReplicaTable[i].Functions.Count);
 			return &mReplicaTable[i];
 		}
 	}
@@ -990,6 +990,7 @@ GenerateProtocolCallStub(
 	//
 	// Setup call metadata.
 	// Also lifetime-managementmaxxing
+	// They don't teach you this stuff in Rust. Because it's UNDETERMINISTIC!!!!1111
 	//
 	CallData->Info = *ReplicaInfo;
 	CallData->HostFunc = HostFunc;
@@ -1016,7 +1017,7 @@ GenerateProtocolCallStub(
 	StubPtr[16] = 0xC3; // return
 
 	DebugPrint0402("GenerateProtocolCallStub: Stub code written at 0x%p, context pointer=0x%p\n", StubPtr, CallData);
-	DebugPrint0402("GenerateProtocolCallStub: Returning guest stub address 0x%llx\n", GuestMem);
+	DebugPrint0402("GenerateProtocolCallStub: Returning guest stub address 0x%p\n", GuestMem);
 
 	return GuestMem;
 }
@@ -1038,7 +1039,7 @@ ReplicateProtocol(
 		return EFI_NOT_FOUND;
 	}
 
-	DebugPrint0402("ReplicateProtocol: Found replica info, Size=%d, NumFuncs=%d\n", Info->Size, Info->NumFuncs);
+	DebugPrint0402("ReplicateProtocol: Found replica info, Size=%d, NumFuncs=%d\n", Info->Size, Info->Functions.Count);
 
 	//
 	// Allocate pool to hold guest protocol replica.
@@ -1056,14 +1057,16 @@ ReplicateProtocol(
 	// Copy original protocol to guest.
 	// BTW this borks when the fields itselfs are pointers.
 	// Which means I have to make custom replicators FOR EACH protocol.
+	// Can't be bothered honestly. Will just fake multiboot2 headers for some kernel and watch it boot.
 	//
+
 	if (!CopyToGuest(GuestCr3, HostInterface, *GuestInterface, Info->Size)) {
 		DebugPrint0402("ReplicateProtocol: FAIL: Copying host interface to guest failed.\n");
 		return EFI_INVALID_PARAMETER;
 	}
 
-	for (UINT32 i = 0; i < Info->NumFuncs; i++) {
-		UINTN Offset = Info->Offsets[i];
+	for (UINT32 i = 0; i < Info->Functions.Count; i++) {
+		UINTN Offset = Info->Functions.Offsets[i];
 		VOID** HostFuncPtr = (VOID**)((UINT8*)HostInterface + Offset);
 		VOID* HostFunc = *HostFuncPtr;
 		
@@ -1108,7 +1111,7 @@ FirmwareExecuteProtocol(
 	DebugPrint0402("FirmwareExecuteProtocol: Context pointer = 0x%p\n", Context);
 	DebugPrint0402("FirmwareExecuteProtocol: Context details: HostFunc=0x%p, FuncIndex=%d, HostThis=0x%p, NumArgs=%d\n",
 		Context->HostFunc, Context->FuncIndex, Context->HostThis,
-		Context->Info.NumArgs[Context->FuncIndex]);
+		Context->Info.Functions.NumArgs[Context->FuncIndex]);
 
 	//
 	// See the last comment in GenerateProtocolCallStub.
@@ -1121,13 +1124,13 @@ FirmwareExecuteProtocol(
 	//
 	UINT64 GuestArgs[16] = { 0 };
 	UINTN i;
-	for (i = 0; i < MIN(Context->Info.NumArgs, (UINTN)4); i++) {
+	for (i = 0; i < MIN(Context->Info.Functions.NumArgs, (UINTN)4); i++) {
 		GuestArgs[i] = ((UINT64[]) { Cpu->Context.Rcx, Cpu->Context.Rdx, Cpu->Context.R8, Cpu->Context.R9 }[i]);
 		DebugPrint0402("FirmwareExecuteProtocol: GuestArg[%d] (register) = 0x%p\n", i, GuestArgs[i]);
 	}
 
 	UINT64 GuestRsp = Cpu->Context.Rsp + 40;
-	for (; i < Context->Info.NumArgs; i++) {
+	for (; i < Context->Info.Functions.NumArgs; i++) {
 		if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &GuestArgs[i], GuestRsp, sizeof(UINT64))) {
 			DebugPrint0402("FirmwareExecuteProtocol: Failed to read stack arg %d from guest RSP+0x%x\n", i, GuestRsp - (Cpu->Context.Rsp + 40));
 			goto EndPageFault;
@@ -1141,13 +1144,13 @@ FirmwareExecuteProtocol(
 	VOID* TempBufs[16] = { NULL };
 	UINTN TempSizes[16] = { 0 };
 
-	CONST FUNC_ARG_DESC* ArgDesc = Context->Info.ArgTables[Context->FuncIndex];
+	CONST FUNC_ARG_DESC* ArgDesc = Context->Info.Functions.ArgTables[Context->FuncIndex];
 
 	CallArgs[0] = (UINT64)Context->HostThis;
 
 	DebugPrint0402("FirmwareExecuteProtocol: Set CallArgs[0] (This) = 0x%p\n", Context->HostThis);
 
-	for (i = 1; i < Context->Info.NumArgs; i++) {
+	for (i = 1; i < Context->Info.Functions.NumArgs; i++) {
 		MarshalArgumentDirection Direction = ArgDesc[i].Direction;
 		MarshalArgumentType Type = ArgDesc[i].Type;
 		INTN SizeIdx = ArgDesc[i].SizeArgIndex;
@@ -1238,7 +1241,7 @@ FirmwareExecuteProtocol(
 	//
 	// Post call processing.
 	//
-	for (i = 1; i < Context->Info.NumArgs; i++) {
+	for (i = 1; i < Context->Info.Functions.NumArgs; i++) {
 		MarshalArgumentDirection Direction = ArgDesc[i].Direction;
 		MarshalArgumentType Type = ArgDesc[i].Type;
 
@@ -1300,14 +1303,14 @@ FirmwareExecuteProtocol(
 	DebugPrint0402("FirmwareExecuteProtocol: Done, returning RAX=%r\n", Result);
 
 Cleanup:
-	for (UINTN j = 1; j < Context->Info.NumArgs; j++) {
+	for (UINTN j = 1; j < Context->Info.Functions.NumArgs; j++) {
 		if (TempBufs[j]) gBS->FreePool(TempBufs[j]);
 	}
 
 	return;
 
 CleanupFail:
-	for (UINTN j = 1; j < Context->Info.NumArgs; j++) {
+	for (UINTN j = 1; j < Context->Info.Functions.NumArgs; j++) {
 		if (TempBufs[j]) gBS->FreePool(TempBufs[j]);
 	}
 

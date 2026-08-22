@@ -203,6 +203,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Efi.h" />
+    <ClInclude Include="Firmware.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="Misc.h" />
     <ClInclude Include="Protocol.h" />

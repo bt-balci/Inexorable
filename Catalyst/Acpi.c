@@ -8,61 +8,88 @@
 #include "Memory.h"
 #include "Firmware.h"
 
+CONST UINT8 MadtAml[] = {
+ #embed "Acpi/madt.aml"
+};
+CONST UINTN MadtAmlSize = sizeof(MadtAml);
+
 /*
 	* Maybe put all of these stuff into g_VmState.Firmware?
-	* Replicates MADT 4 CPUs with x2APIC enabled
+	* Generates MADT 4 CPUs with x2APIC enabled
 */
 EFI_STATUS
 EFIAPI
-ReplicateAcpiTables(
-	OUT EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER* Rsdp
+GenerateAcpiTables(
+	VOID
 ) {
 	EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER* Rsdp = NULL;
-	EFI_ACPI_6_1_FIXED_ACPI_DESCRIPTION_TABLE* Fadt = NULL;
+	UINT64 RsdpPtr = ACPI_RSDP_BASE;
 	EFI_ACPI_DESCRIPTION_HEADER* XsdtHeader = NULL;
+	UINT64 XsdtPtr = ACPI_XSDT_BASE;
+	EFI_ACPI_6_1_MULTIPLE_APIC_DESCRIPTION_TABLE_HEADER* Madt = NULL;
+	UINT64 MadtPtr = ACPI_MADT_BASE;
 
-	EFI_STATUS Status = gBS->AllocatePages(AllocateAnyPages, EfiRuntimeServicesData, EFI_SIZE_TO_PAGES(sizeof(EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER)),
-		(EFI_PHYSICAL_ADDRESS*)&Rsdp);
+	//
+	// Allocate at fixed addresses.
+	//
+	EFI_STATUS Status = GuestFindFreePages(AllocateAddress, EFI_SIZE_TO_PAGES(sizeof(*Rsdp)), &RsdpPtr);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("ReplicateAcpiTables: FAIL: Cannnot allocate EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER\n");
+		DebugPrint0402("GenerateAcpiTables: FAIL: Cannnot allocate EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER. %r\n", Status);
 		return Status;
 	}
 
-	Status = gBS->AllocatePages(AllocateAnyPages, EfiRuntimeServicesData, EFI_SIZE_TO_PAGES(sizeof(EFI_ACPI_6_1_FIXED_ACPI_DESCRIPTION_TABLE)),
-		(EFI_PHYSICAL_ADDRESS*)&Fadt);
+	Status = GuestFindFreePages(AllocateAddress, EFI_SIZE_TO_PAGES(sizeof(*XsdtHeader)), &XsdtPtr);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("ReplicateAcpiTables: FAIL: Cannnot allocate EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER\n");
+		DebugPrint0402("GenerateAcpiTables: FAIL: Cannnot allocate EFI_ACPI_DESCRIPTION_HEADER for XSDT. %r\n", Status);
+		return Status;
+	}
+
+	Status = GuestFindFreePages(AllocateAddress, EFI_SIZE_TO_PAGES(MadtAmlSize), &MadtPtr);
+	if (EFI_ERROR(Status)) {
+		DebugPrint0402("GenerateAcpiTables: FAIL: Cannnot allocate EFI_ACPI_DESCRIPTION_HEADER for XSDT. %r\n", Status);
 		return Status;
 	}
 
 	//
-	// +8 for FADT
+	// Not TranslateGuestAddressToHostAddress, guest didn't start yet and is in identity map.
 	//
-	Status = gBS->AllocatePages(AllocateAnyPages, EfiRuntimeServicesData, EFI_SIZE_TO_PAGES(sizeof(EFI_ACPI_DESCRIPTION_HEADER) + 8),
-		(EFI_PHYSICAL_ADDRESS*)&XsdtHeader);
-	if (EFI_ERROR(Status)) {
-		DebugPrint0402("ReplicateAcpiTables: FAIL: Cannnot allocate EFI_ACPI_DESCRIPTION_HEADER (for XSDT)\n");
+	if (!TranslateGuestPhysicalToHostPhysical(RsdpPtr, (VOID**)&Rsdp)) {
+		DebugPrint0402("GenerateAcpiTables: FAIL: Cannnot translate RsdpPtr to host address\n");
+		return Status;
+	}
+
+	if (!TranslateGuestPhysicalToHostPhysical(MadtPtr, (VOID**)&Madt)) {
+		DebugPrint0402("GenerateAcpiTables: FAIL: Cannnot translate MadtPtr to host address\n");
+		return Status;
+	}
+
+	if (!TranslateGuestPhysicalToHostPhysical(XsdtPtr, (VOID**)&XsdtHeader)) {
+		DebugPrint0402("GenerateAcpiTables: FAIL: Cannnot translate XsdtPtr to host address\n");
 		return Status;
 	}
 
 	//
 	// Acpimaxxing
 	//
-
 	Rsdp->Revision = EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER_REVISION;
 	Rsdp->Signature = EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER_SIGNATURE;
 	CopyMem(Rsdp->OemId, "BALCI ", 6);
 
-
-	Rsdp->XsdtAddress = 0;
 	Rsdp->RsdtAddress = 0; // No.
+
+	Rsdp->XsdtAddress = XsdtPtr;
 
 	Rsdp->Length = sizeof(*Rsdp);
 	Rsdp->Checksum = 0;
+	Rsdp->ExtendedChecksum = 0;
+
+	Rsdp->Checksum = CalculateCheckSum8((UINT8*)Rsdp, 20);
+	Rsdp->ExtendedChecksum = CalculateCheckSum8((UINT8*)Rsdp, Rsdp->Length);
 
 	XsdtHeader->Revision = EFI_ACPI_6_1_EXTENDED_SYSTEM_DESCRIPTION_TABLE_REVISION;
 	XsdtHeader->Signature = EFI_ACPI_6_1_EXTENDED_SYSTEM_DESCRIPTION_TABLE_SIGNATURE;
 	CopyMem(XsdtHeader->OemId, "BALCI ", 6);
+	CopyMem((UINT8*)XsdtHeader->OemTableId, "BTBTBTBT", 8);
 	XsdtHeader->OemRevision = 1;
 	XsdtHeader->CreatorRevision = 1;
 	XsdtHeader->CreatorId = SIGNATURE_32('B', 'T', 'B', 'T');
@@ -70,17 +97,14 @@ ReplicateAcpiTables(
 	XsdtHeader->Length = sizeof(*XsdtHeader);
 	XsdtHeader->Checksum = 0;
 
-	Fadt->Header.Revision = EFI_ACPI_6_1_FIXED_ACPI_DESCRIPTION_TABLE_REVISION;
-	Fadt->Header.Signature = EFI_ACPI_6_1_FIXED_ACPI_DESCRIPTION_TABLE_SIGNATURE;
-	CopyMem(Fadt->Header.OemId, "BALCI ", 6);
-	CopyMem(&Fadt->Header.OemTableId, "BALCIFA", 8);
-	Fadt->Header.OemRevision = 1;
-	Fadt->Header.CreatorRevision = 1;
-	Fadt->Header.CreatorId = SIGNATURE_32('B', 'T', 'B', 'T');
+	UINT64* XsdtEntries = (UINT64*)((UINT8*)XsdtHeader + XsdtHeader->Length);
+	XsdtEntries[0] = MadtPtr;
 
-	Fadt->Header.Length = sizeof(*Fadt);
-	Fadt->Header.Checksum = 0;
+	XsdtHeader->Length += 8;
 
+	XsdtHeader->Checksum = CalculateCheckSum8((UINT8*)XsdtHeader, XsdtHeader->Length);
+
+	CopyMem(Madt, MadtAml, MadtAmlSize);
 
 	return EFI_SUCCESS;
 }

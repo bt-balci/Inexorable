@@ -290,7 +290,7 @@ VmExitHandler(
 			FirmwareGetNextHighMonotonicCount(Cpu);
 			break;
 		case CATALYST_VMCALL_RESET_SYSTEM:
-			DebugPrint0402("  VMCALL -> ResetSystem — HALTING\n");
+			DebugPrint0402("  VMCALL -> ResetSystem - HALTING\n");
 			__asm__ __volatile__("hlt");
 			break;
 

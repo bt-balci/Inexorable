@@ -226,6 +226,7 @@
     <ClCompile Include="x86.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Acpi.h" />
     <ClInclude Include="Efi.h" />
     <ClInclude Include="Firmware.h" />
     <ClInclude Include="Memory.h" />

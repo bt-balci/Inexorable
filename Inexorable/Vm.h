@@ -1,6 +1,10 @@
 #ifndef _VM_H_
 #define _VM_H_
 
+#define ACPI_RSDP_BASE				0x20000
+#define ACPI_XSDT_BASE				0x21000
+#define ACPI_MADDT_BASE				0x22000
+
 ///////////////////////////////////////////////
 ////				VMCALLs 			   ////
 ///////////////////////////////////////////////

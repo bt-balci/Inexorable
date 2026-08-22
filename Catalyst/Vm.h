@@ -9,9 +9,13 @@
 ///////////////////////////////////////////////
 
 //
-// It's recommended to put firmware above 0x10000 mark since MapMemory will utilize the first few kilobytes of memory as soon as the mapping is done.
+// It's recommended to put firmware above 0x10000 mark since MapMemory will utilize the first few kilobytes of memory for page tables.
 //
 #define FIRMWARE_IMAGE_BASE			0x10000
+
+#define ACPI_RSDP_BASE				0x20000
+#define ACPI_XSDT_BASE				0x21000
+#define ACPI_MADT_BASE				0x22000
 
 #define BSP_INITIAL_STACK_SIZE		0x4000
 

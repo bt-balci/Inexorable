@@ -4,6 +4,7 @@
 #include <Library/BaseLib.h>
 #include <Library/PrintLib.h>
 #include <Protocol/GraphicsOutput.h>
+#include <Protocol/LoadedImage.h>
 
 #include "Efi.h"
 #include "Util.h"
@@ -14,6 +15,8 @@
 #include "Memory.h"
 #include "Protocol.h"
 
+CHAR8* gEfiCallerBaseName = "BT-BALCI";
+
 EFI_SYSTEM_TABLE		gST = { 0 };
 EFI_BOOT_SERVICES	    gBS = { 0 };
 EFI_RUNTIME_SERVICES	gRT = { 0 };
@@ -23,29 +26,19 @@ EFIAPI
 TestMain(
 	VOID
 ) {
-	EFI_GRAPHICS_OUTPUT_PROTOCOL* Gop = NULL;
+	EFI_LOADED_IMAGE_PROTOCOL* LoadedImage = NULL;
 
-	EFI_STATUS Status = gBS.LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (VOID**)&Gop);
+	EFI_STATUS Status = gBS.AllocatePool(EfiRuntimeServicesData, sizeof(*LoadedImage), (VOID**)&LoadedImage);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("[GUEST] Failed to locate Graphics Output Protocol: %r\n", Status);
+		DebugPrint0402("[GUEST] Cannot allocate memory for LOADED_IMAGE_PROTOCOL. %r\n");
 		return;
 	}
 
-	DebugPrint0402("[GUEST] Graphics Output Protocol at: 0x%p\n", Gop);
-
-	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.HResolution: %d\n", Gop->Mode->Info->HorizontalResolution);
-	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.VResolution: %d\n", Gop->Mode->Info->VerticalResolution);
-
-	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.FrameBufferBase: 0x%p\n", Gop->Mode->FrameBufferBase);
-	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.FrameBufferSize: 0x%p\n", Gop->Mode->FrameBufferSize);
-
-	//
-	// Blue
-	//
-	EFI_GRAPHICS_OUTPUT_BLT_PIXEL Color = { 0, 0, 255, 0 };
-
-	if (EFI_ERROR(Gop->Blt(Gop, &Color, EfiBltVideoFill, 0, 0, 0, 0, Gop->Mode->Info->HorizontalResolution, Gop->Mode->Info->VerticalResolution, 0))) {
-		DebugPrint0402("[GUEST] Failed to call Blt: %r\n", Status);
+	EFI_HANDLE WorkhorseHandle = 0;
+	Status = gBS.InstallProtocolInterface(&WorkhorseHandle, &gEfiLoadedImageProtocolGuid, EFI_NATIVE_INTERFACE, (VOID*)LoadedImage);
+	if (EFI_ERROR(Status)) {
+		DebugPrint0402("[GUEST] Cannot install LOADED_IMAGE_PROTOCOL. %r\n");
+		return;
 	}
 }
 
@@ -119,11 +112,9 @@ UefiMain(
 	gBS.OpenProtocol				= IxOpenProtocol;
 	gBS.LocateProtocol				= IxLocateProtocol;
 	gBS.HandleProtocol				= IxHandleProtocol;
+	gBS.InstallProtocolInterface	= IxInstallProtocolInterface;
 
-	//
-	// Who uses this dude?
-	// 
-	//gBS.GetNextMonotonicCount		= IxGetNextHighMonotonicCount;
-
-	TestMain();
+	InitializeListHead(&g_ProtocolList);
+	InitializeListHead(&g_HandleList);
+	InitializeListHead(&g_VariableList);
 }

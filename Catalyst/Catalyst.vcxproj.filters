@@ -53,6 +53,9 @@
     <ClInclude Include="Firmware.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Acpi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <MASM Include="Context.asm">
