@@ -1054,6 +1054,8 @@ ReplicateProtocol(
 
 	//
 	// Copy original protocol to guest.
+	// BTW this borks when the fields itselfs are pointers.
+	// Which means I have to make custom replicators FOR EACH protocol.
 	//
 	if (!CopyToGuest(GuestCr3, HostInterface, *GuestInterface, Info->Size)) {
 		DebugPrint0402("ReplicateProtocol: FAIL: Copying host interface to guest failed.\n");

@@ -218,7 +218,7 @@ LoadFirmware(
 			UINT64 PageOffset = CurrentGuestAddress & 0xFFF;
 
 			//
-			// Substract from 0x1000 to deetermine amounts of bytes to write. Because if we only took the PageOffset it could be zero.
+			// Substract from 0x1000 to determine amounts of bytes to write. Because if we only took the PageOffset it could be zero.
 			//
 			UINT64 ChunkSize = 0x1000 - PageOffset;
 
