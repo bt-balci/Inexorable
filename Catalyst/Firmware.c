@@ -508,7 +508,7 @@ GuestFindFreePages(
 	IN EFI_ALLOCATE_TYPE	AllocationType,
 	IN UINTN				Pages,
 	IN OUT UINT64*			OutPageBase
-){
+) {
 	UINT64 MaxAddrPage = 0;
 	UINT64 Start = 0;
 
@@ -518,7 +518,7 @@ GuestFindFreePages(
 	if (AllocationType == AllocateAddress) {
 		//
 		// Exact address requested; must be free.
-		// Input is a GPA — convert to page index.
+		// Input is a GPA, convert to page index.
 		//
 		Start = *OutPageBase >> EFI_PAGE_SHIFT;
 		for (UINT64 j = Start; j < Start + Pages; j++) {
@@ -549,10 +549,13 @@ GuestFindFreePages(
 
 		Start = g_VmState.Firmware.Memory.NextFreeHint;
 		if (Start > MaxAddrPage - Pages + 1) {
-			Start = 0;  // hint out of range, start at bottom
+			Start = 0;  // Hint out of range, start at bottom
 		}
 	}
-	else { // AllocateAnyPages
+	else {
+		//
+		// AllocateAnyPages
+		//
 		MaxAddrPage = g_VmState.Firmware.Memory.TotalPages;
 		Start = g_VmState.Firmware.Memory.NextFreeHint;
 	}
@@ -585,16 +588,25 @@ GuestFindFreePages(
 		if ((g_VmState.Firmware.Memory.MemoryBitmap[Byte] & (1 << Bit)) == 0) {
 			if (++Found == Pages) {
 				UINT64 Base = i - Pages + 1;
+
+				VOID* HostAddress = NULL;
+				if (!TranslateGuestPhysicalToHostPhysical((Base << EFI_PAGE_SHIFT), &HostAddress)) {
+					DebugPrint0402("GuestFindFreePages: FAILED: GPA does not correspond to any HPA");
+					g_VmState.Firmware.Memory.MemoryBitmap[Byte] &= ~(1 << Bit);
+					return EFI_NO_MAPPING;
+				}
+
 				for (UINT64 j = Base; j < Base + Pages; j++) {
 					Byte = j / 8;
 					Bit = j % 8;
 					g_VmState.Firmware.Memory.MemoryBitmap[Byte] |= (1 << Bit);
 				}
 				g_VmState.Firmware.Memory.NextFreeHint = Base + Pages;
-	*OutPageBase = Base << EFI_PAGE_SHIFT;
-	DebugPrint0402("GuestFindFreePages: SUCCESS base=0x%p (GPA), NextHint=%d\n",
-		*OutPageBase, g_VmState.Firmware.Memory.NextFreeHint);
-	return EFI_SUCCESS;
+				*OutPageBase = Base << EFI_PAGE_SHIFT;
+
+				DebugPrint0402("GuestFindFreePages: SUCCESS Base=0x%p (GPA) Base=0x%p (HPA), NextHint=%d\n",
+					*OutPageBase, HostAddress, g_VmState.Firmware.Memory.NextFreeHint);
+				return EFI_SUCCESS;
 			}
 		}
 		else {
@@ -609,7 +621,7 @@ GuestFindFreePages(
 			break;
 		}
 	}
-	DebugPrint0402("GuestFindFreePages: FAILED — OUT_OF_RESOURCES (wanted %d pages, max=%d)\n", Pages, MaxAddrPage);
+	DebugPrint0402("GuestFindFreePages: FAILED: OUT_OF_RESOURCES (wanted %d pages, max=%d)\n", Pages, MaxAddrPage);
 	return EFI_OUT_OF_RESOURCES;
 }
 

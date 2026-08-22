@@ -74,7 +74,7 @@ BOOLEAN
 EFIAPI
 CopyFromGuest(
 	IN CR3      GuestCr3,
-	IN VOID*	HostBuffer,
+	IN VOID* HostBuffer,
 	IN UINT64   GuestVirtualAddress,
 	IN UINTN    Size
 ) {
@@ -153,33 +153,33 @@ BOOLEAN
 EFIAPI
 TranslateGuestPhysicalToHostPhysical(
 	IN UINT64   GuestPhysicalAddress,
-	OUT VOID**  HostPhysicalAddress
+	OUT VOID**	HostPhysicalAddress
 ) {
 	*HostPhysicalAddress = NULL;
 
-	UINT16 Pml4Idx  = (GuestPhysicalAddress >> 39) & 0x1FF;
-	UINT16 PdptIdx  = (GuestPhysicalAddress >> 30) & 0x1FF;
-	UINT16 PdIdx    = (GuestPhysicalAddress >> 21) & 0x1FF;
-	UINT16 PtIdx    = (GuestPhysicalAddress >> 12) & 0x1FF;
-	UINT16 Offset   = (GuestPhysicalAddress) & 0xFFF;
+	UINT16 Pml4Idx = (GuestPhysicalAddress >> 39) & 0x1FF;
+	UINT16 PdptIdx = (GuestPhysicalAddress >> 30) & 0x1FF;
+	UINT16 PdIdx = (GuestPhysicalAddress >> 21) & 0x1FF;
+	UINT16 PtIdx = (GuestPhysicalAddress >> 12) & 0x1FF;
+	UINT16 Offset = (GuestPhysicalAddress) & 0xFFF;
 
 	EPT_PML4* Epml4 = &g_VmState.AddressSpace.Epml4[Pml4Idx];
-if (!Epml4->Present) {
-	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PML4[%d] — not present\n", GuestPhysicalAddress, Pml4Idx);
-	return FALSE;
-}
+	if (!Epml4->Present) {
+		DebugPrint0402("TranslateGuestPhysicalToHostPhysical: TranslateGPA->HPA: GPA=0x%p FAIL at PML4[%d] — not present\n", GuestPhysicalAddress, Pml4Idx);
+		return FALSE;
+	}
 
-EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
-if (!Pdpt->Present) {
-	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PDPTE[%d] — not present\n", GuestPhysicalAddress, PdptIdx);
-	return FALSE;
-}
+	EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
+	if (!Pdpt->Present) {
+		DebugPrint0402("TranslateGuestPhysicalToHostPhysical: TranslateGPA->HPA: GPA=0x%p FAIL at PDPTE[%d] — not present\n", GuestPhysicalAddress, PdptIdx);
+		return FALSE;
+	}
 
-EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
-if (!Pd->Present) {
-	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PDE[%d] — not present\n", GuestPhysicalAddress, PdIdx);
-	return FALSE;
-}
+	EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
+	if (!Pd->Present) {
+		DebugPrint0402("TranslateGuestPhysicalToHostPhysical: TranslateGPA->HPA: GPA=0x%p FAIL at PDE[%d] — not present\n", GuestPhysicalAddress, PdIdx);
+		return FALSE;
+	}
 
 	/*
 	if (Pd->Large)
@@ -187,14 +187,14 @@ if (!Pd->Present) {
 	*/
 
 	EPT_PTE* Pt = &(((EPT_PTE*)(((EPT_PDE*)Pd)->PhysicalAddress << 12))[PtIdx]);
-if (!Pt->Present) {
-	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PTE[%d] — not present\n", GuestPhysicalAddress, PtIdx);
-	return FALSE;
-}
+	if (!Pt->Present) {
+		DebugPrint0402("TTranslateGuestPhysicalToHostPhysical: ranslateGPA->HPA: GPA=0x%p FAIL at PTE[%d] — not present\n", GuestPhysicalAddress, PtIdx);
+		return FALSE;
+	}
 
 	UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12) + Offset;
 
-	DebugPrint0402("GPA = 0x%p, translates to HPA = 0x%p. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", GuestPhysicalAddress, Result, Pml4Idx, PdptIdx, PdIdx, PtIdx);
+	DebugPrint0402("TranslateGuestPhysicalToHostPhysical: GPA = 0x%p, translates to HPA = 0x%p. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", GuestPhysicalAddress, Result, Pml4Idx, PdptIdx, PdIdx, PtIdx);
 
 	*HostPhysicalAddress = (VOID*)Result;
 
@@ -258,7 +258,7 @@ EFIAPI
 TranslateGuestAddressToHostAddress(
 	IN CR3      GuestCr3,
 	IN UINT64   GuestVirtual,
-	OUT VOID**  HostVirtual
+	OUT VOID** HostVirtual
 ) {
 
 	UINT64 HostPhysical = 0;
@@ -275,10 +275,10 @@ MapSinglePage(
 	IN UINT64   HostPhysical,
 	IN BOOLEAN  Big
 ) {
-	UINT16 Pml4Idx  = (GuestPhysical >> 39) & 0x1FF;
-	UINT16 PdptIdx  = (GuestPhysical >> 30) & 0x1FF;
-	UINT16 PdIdx    = (GuestPhysical >> 21) & 0x1FF;
-	UINT16 PtIdx    = (GuestPhysical >> 12) & 0x1FF;
+	UINT16 Pml4Idx = (GuestPhysical >> 39) & 0x1FF;
+	UINT16 PdptIdx = (GuestPhysical >> 30) & 0x1FF;
+	UINT16 PdIdx = (GuestPhysical >> 21) & 0x1FF;
+	UINT16 PtIdx = (GuestPhysical >> 12) & 0x1FF;
 
 	//DebugPrint0402("Mapping GPA = %p to HPA = %p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n",
 		//GuestPhysical, HostPhysical, Big, Pml4Idx, PdptIdx, PdIdx, PtIdx);
@@ -294,7 +294,7 @@ MapSinglePage(
 		Epml4->ExecuteUser = TRUE;
 
 		if (g_VmState.AddressSpace.EpdptCount >= 64) {
-			DebugPrint0402("g_EpdptCount is bigger than 64. Borked\n");
+			DebugPrint0402("MapSinglePage: g_EpdptCount is bigger than 64. Borked\n");
 			return FALSE;
 		}
 		UINT32 PdptPoolIndex = g_VmState.AddressSpace.EpdptCount++;
@@ -317,7 +317,7 @@ MapSinglePage(
 		Epdpt->ExecuteUser = TRUE;
 
 		if (g_VmState.AddressSpace.EpdeCount >= 512) {
-			DebugPrint0402("g_EpdeCount is bigger than 512. Borked\n");
+			DebugPrint0402("MapSinglePage: g_EpdeCount is bigger than 512. Borked\n");
 			return FALSE;
 		}
 		UINT32 PdPoolIndex = g_VmState.AddressSpace.EpdeCount++;
@@ -371,7 +371,7 @@ MapSinglePage(
 		// Hmm. Can we get borked? Better log than hang.
 		//
 		if (g_VmState.AddressSpace.EpteCount >= 16384) {
-			DebugPrint0402("g_EpteCount is bigger than 16384. Borked\n");
+			DebugPrint0402("MapSinglePage: g_EpteCount is bigger than 16384. Borked\n");
 			return FALSE;
 		}
 
@@ -385,7 +385,7 @@ MapSinglePage(
 
 	EPT_PTE* Ept = &(((EPT_PTE*)(Epd->PhysicalAddress << 12))[PtIdx]);
 	if (Ept->Present) {
-		DebugPrint0402("Ept is already present. Failed to map. GPA = 0x%p to HPA = 0x%p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d, Ept = 0x%p\n",
+		DebugPrint0402("MapSinglePage: Ept is already present. Failed to map. GPA = 0x%p to HPA = 0x%p, Big = %d, Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d, Ept = 0x%p\n",
 			GuestPhysical, HostPhysical, Big, Pml4Idx, PdptIdx, PdIdx, PtIdx, Ept->All);
 		return FALSE;
 	}
@@ -411,11 +411,11 @@ EFIAPI
 MapPagesLinear(
 	IN UINT64       PhysicalStart,
 	IN UINT64       NumberOfPages,
-	IN OUT UINT64*  CurrentGuestPhysical
+	IN OUT UINT64* CurrentGuestPhysical
 ) {
-	UINT64 PhysicalAddr     = PhysicalStart;
-	UINT64 GuestPhysical    = *CurrentGuestPhysical;
-	UINT64 BytesRemaining   = NumberOfPages * SIZE_4KB;
+	UINT64 PhysicalAddr = PhysicalStart;
+	UINT64 GuestPhysical = *CurrentGuestPhysical;
+	UINT64 BytesRemaining = NumberOfPages * SIZE_4KB;
 
 	//DebugPrint0402("Mapping PhysicalStart = 0x%p and %d pages starting from 0x%p\n", PhysicalAddr, NumberOfPages, GuestPhysical);
 

@@ -432,7 +432,7 @@ SetupVmcs(
 ) {
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)_readgsbase_u64();
 
-	DebugPrint0402("Virtualizing processor %d...\n", Cpu->Index);
+	DebugPrint0402("SetupVmcs[%d]: Virtualizing processor...\n", Cpu->Index);
 
 	//
 	// Initialize controls.
@@ -548,7 +548,7 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_RIP, Cpu->Context.Rip);
 	__vmx_vmwrite(GUEST_RSP, Cpu->Context.Rsp);
 
-	DebugPrint0402("GUEST_RIP = 0x%p, GUEST_RSP = 0x%p\n", Cpu->Context.Rip, Cpu->Context.Rsp);
+	DebugPrint0402("SetupVmcs[%d]: GUEST_RIP = 0x%p, GUEST_RSP = 0x%p, GUEST_CR3 = 0x%p\n", Cpu->Index, Cpu->Context.Rip, Cpu->Context.Rsp, g_VmState.AddressSpace.GuestCr3);
 }
 
 VOID
@@ -558,15 +558,15 @@ PrepareProcessor(
 ) {
 	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)Argument;
 
-	DebugPrint0402("Preparing processor %d...\n", Cpu->Index);
+	DebugPrint0402("PrepareProcessor: Preparing processor %d...\n", Cpu->Index);
 
-	DebugPrint0402("Preparing CR registers...\n");
+	DebugPrint0402("PrepareProcessor: Preparing CR registers...\n");
 
 	//
 	// Read CR0 and CR4.
 	//
 	UINT64 Cr0 = __readcr0();
-	DebugPrint0402("CR0 = %p\n", Cr0);
+	DebugPrint0402("PrepareProcessor: CR0 = %p\n", Cr0);
 
 	UINT64 Cr4 = __readcr4();
 
@@ -575,7 +575,7 @@ PrepareProcessor(
 	//
 	Cr4 |= (1 << 16);
 
-	DebugPrint0402("CR4 = %p\n", Cr4);
+	DebugPrint0402("PrepareProcessor: CR4 = %p\n", Cr4);
 
 	//
 	// Read required bitmask values for Cr0 and Cr4.
@@ -583,20 +583,20 @@ PrepareProcessor(
 	UINT64 Cr0OrMask = __readmsr(IA32_VMX_CR0_FIXED0);
 	UINT64 Cr0AndMask = __readmsr(IA32_VMX_CR0_FIXED1);
 
-	DebugPrint0402("CR0_FIXED0 = %p\n", Cr0OrMask);
-	DebugPrint0402("CR0_FIXED1 = %p\n", Cr0AndMask);
+	DebugPrint0402("PrepareProcessor: CR0_FIXED0 = %p\n", Cr0OrMask);
+	DebugPrint0402("PrepareProcessor: CR0_FIXED1 = %p\n", Cr0AndMask);
 
 	UINT64 Cr4OrMask = __readmsr(IA32_VMX_CR4_FIXED0);
 	UINT64 Cr4AndMask = __readmsr(IA32_VMX_CR4_FIXED1);
 
-	DebugPrint0402("CR4_FIXED0 = %p\n", Cr4OrMask);
-	DebugPrint0402("CR4_FIXED1 = %p\n", Cr4AndMask);
+	DebugPrint0402("PrepareProcessor: CR4_FIXED0 = %p\n", Cr4OrMask);
+	DebugPrint0402("PrepareProcessor: CR4_FIXED1 = %p\n", Cr4AndMask);
 
 	Cr0 = (Cr0 & Cr0AndMask) | Cr0OrMask;
 	Cr4 = (Cr4 & Cr4AndMask) | Cr4OrMask;
 
-	DebugPrint0402("CR0_FINAL = %p\n", Cr0);
-	DebugPrint0402("CR4_FINAL = %p\n", Cr4);
+	DebugPrint0402("PrepareProcessor: CR0_FINAL = %p\n", Cr0);
+	DebugPrint0402("PrepareProcessor: CR4_FINAL = %p\n", Cr4);
 
 	//
 	// Write values back.
@@ -623,7 +623,7 @@ PrepareProcessor(
 	//
 	UINT32 Revision = __readmsr(IA32_VMX_BASIC);
 
-	DebugPrint0402("VMX Revision (IA32_VMX_BASIC) = %d\n", Revision);
+	DebugPrint0402("PrepareProcessor: VMX Revision (IA32_VMX_BASIC) = %d\n", Revision);
 
 	//
 	// Set revision field of each VMX structure.
@@ -631,8 +631,8 @@ PrepareProcessor(
 	Cpu->Vmx.Vmcs.RevisionIdentifier = Revision;
 	Cpu->Vmx.VmxOn.RevisionIdentifier = Revision;
 
-	DebugPrint0402("VMXON = %p\n", &Cpu->Vmx.VmxOn);
-	DebugPrint0402("VMCS = %p\n", &Cpu->Vmx.Vmcs);
+	DebugPrint0402("PrepareProcessor: VMXON = %p\n", &Cpu->Vmx.VmxOn);
+	DebugPrint0402("PrepareProcessor: VMCS = %p\n", &Cpu->Vmx.Vmcs);
 
 	//
 	// Set VMXON region.
@@ -640,23 +640,23 @@ PrepareProcessor(
 	//
 	UINT8 Error = __vmx_on((UINT64)&Cpu->Vmx.VmxOn);
 	if (Error != 0) {
-		DebugPrint0402("Failed to vmxon: %d\n", Error);
+		DebugPrint0402("PrepareProcessor: FAIL: Failed to vmxon: %d\n", Error);
 		return;
 	}
 
 	Error = __vmx_vmclear((UINT64)&Cpu->Vmx.Vmcs);
 	if (Error != 0) {
-		DebugPrint0402("Failed to vmclear: %d\n", Error);
+		DebugPrint0402("PrepareProcessor: FAIL: Failed to vmclear: %d\n", Error);
 		return;
 	}
 
 	Error = __vmx_vmptrld((UINT64)&Cpu->Vmx.Vmcs);
 	if (Error != 0) {
-		DebugPrint0402("Failed to vmptrld: %d\n", Error);
+		DebugPrint0402("PrepareProcessor: FAIL: Failed to vmptrld: %d\n", Error);
 		return;
 	}
 
-	DebugPrint0402("Processor %d prepared\n", Cpu->Index);
+	DebugPrint0402("PrepareProcessor: FAIL: Processor %d prepared\n", Cpu->Index);
 
 	//
 	// Fill VMCS and virtualize processor.

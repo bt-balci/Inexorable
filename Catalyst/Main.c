@@ -63,7 +63,7 @@ PrepareProcessors(
 	//
 	ASSERT(EnabledProcessors == CONFIG_CPU_COUNT);
 
-	DebugPrint0402("Total of %d processors, %d enabled\n", TotalProcessors, EnabledProcessors);
+	DebugPrint0402("PrepareProcessors: Total of %d processors, %d enabled\n", TotalProcessors, EnabledProcessors);
 
 	{
 		CATALYST_VIRTUAL_CPU* Cpu = &g_VirtualProcessors[0];
@@ -75,7 +75,7 @@ PrepareProcessors(
 		Cpu->Context.Rsp = StackGpa + BSP_INITIAL_STACK_SIZE;
 		Cpu->Context.Rip = (UINT64)GuestRip;
 
-		DebugPrint0402("BSP stack allocated at GPA 0x%p - 0x%p\n", StackGpa, Cpu->Context.Rsp - 1);
+		DebugPrint0402("PrepareProcessors: BSP stack allocated at GPA 0x%p - 0x%p\n", StackGpa, Cpu->Context.Rsp - 1);
 	}
 
 
@@ -110,25 +110,25 @@ PrepareProcessors(
 		//
 		Cpu->Context.Rsp = 0;
 
-		DebugPrint0402("Starting AP %d...\n", i);
+		DebugPrint0402("PrepareProcessors: Starting AP %d...\n", i);
 
 		//
 		// Start in blocking mode. We will wait until each one of them finishes.
 		//
 		Status = MpServices->StartupThisAP(MpServices, PrepareProcessor, i, NULL, 0, (VOID*)Cpu, NULL);
 		if (EFI_ERROR(Status)) {
-			DebugPrint0402("Failed starting AP %d. Error: %r\n", i, Status);
+			DebugPrint0402("PrepareProcessors: FAIL: Failed starting AP %d. Error: %r\n", i, Status);
 			return Status;
 		}
 
-		DebugPrint0402("AP %d started!\n", i);
+		DebugPrint0402("PrepareProcessors: AP %d started!\n", i);
 	}
 
-	DebugPrint0402("Preparing BSP...\n");
+	DebugPrint0402("PrepareProcessors: Preparing BSP...\n");
 
 	PrepareProcessor(&g_VirtualProcessors[0]);
 
-	DebugPrint0402("BSP initialized. We are ready.\n");
+	DebugPrint0402("PrepareProcessors: BSP initialized. We are ready.\n");
 
 	return EFI_SUCCESS;
 }
@@ -147,19 +147,19 @@ LoadFirmware(
 	// (Even though this POC won't run in HP computers, I felt an immense impulse just to mess with HP)
 	//
 
-	DebugPrint0402("Mapping firmware...\n");
+	DebugPrint0402("LoadFirmware: Mapping firmware...\n");
 
 	EFI_IMAGE_DOS_HEADER* DosHeader = (EFI_IMAGE_DOS_HEADER*)&g_InexorableEfi;
 
 	if (DosHeader->e_magic != EFI_IMAGE_DOS_SIGNATURE) {
-		DebugPrint0402("Catalyst only supports PE32+ firmwares.\n");
+		DebugPrint0402("LoadFirmware: FAIL: Catalyst only supports PE32+ firmwares.\n");
 		return EFI_UNSUPPORTED;
 	}
 
 	EFI_IMAGE_NT_HEADERS64* NtHeaders = (EFI_IMAGE_NT_HEADERS64*)((UINT8*)&g_InexorableEfi + DosHeader->e_lfanew);
 
 	if (NtHeaders->FileHeader.Machine != EFI_IMAGE_MACHINE_X64) {
-		DebugPrint0402("Catalyst only supports x86_64 firmwares.\n");
+		DebugPrint0402("LoadFirmware: FAIL: Catalyst only supports x86_64 firmwares.\n");
 		return EFI_UNSUPPORTED;
 	}
 
@@ -172,30 +172,35 @@ LoadFirmware(
 	// Chad will just virtualize address space via EPTs.
 	//
 	if (OptionalHeader->ImageBase != FIRMWARE_IMAGE_BASE) {
-		DebugPrint0402("The firmware preferred ImageBase must be exactly 0x%p.\n", FIRMWARE_IMAGE_BASE);
+		DebugPrint0402("LoadFirmware: FAIL: The firmware preferred ImageBase must be exactly 0x%p.\n", FIRMWARE_IMAGE_BASE);
 		return EFI_UNSUPPORTED;
 	}
 
 	if (OptionalHeader->SectionAlignment != 0x1000) {
-		DebugPrint0402("The firmware executable's section alignment must be 0x1000.\n");
+		DebugPrint0402("LoadFirmware: FAIL: The firmware executable's section alignment must be 0x1000.\n");
 		return EFI_UNSUPPORTED;
 	}
 
 	UINT64 GuestBaseAddress = FIRMWARE_IMAGE_BASE;
 	UINT8* HostBaseAddress = NULL;
 
+	if (EFI_ERROR(GuestFindFreePages(AllocateAddress, EFI_SIZE_TO_PAGES(OptionalHeader->SizeOfImage), &GuestBaseAddress))) {
+		DebugPrint0402("LoadFirmware: FAIL: Cannot allocate memory at 0x%p for firmware image.\n", GuestBaseAddress);
+		return EFI_NO_MAPPING;
+	}
+
 	if (!TranslateGuestPhysicalToHostPhysical(GuestBaseAddress, (VOID**)&HostBaseAddress)) return EFI_NO_MAPPING;
 
-	DebugPrint0402("Firmware image base GPA = 0x%p, HPA = 0x%p\n", GuestBaseAddress, HostBaseAddress);
+	DebugPrint0402("LoadFirmware: Firmware image base GPA = 0x%p, HPA = 0x%p\n", GuestBaseAddress, HostBaseAddress);
 	
 	//
 	// This assumes header is less than 4096 bytes.
 	// It should be. If your header is bigger than 4096 bytes don't talk to me.
 	//
-	DebugPrint0402("Copying headers from 0x%p to 0x%p with length 0x%p\n", (VOID*)&g_InexorableEfi, HostBaseAddress, OptionalHeader->SizeOfHeaders);
+	DebugPrint0402("LoadFirmware: Copying headers from 0x%p to 0x%p with length 0x%p\n", (VOID*)&g_InexorableEfi, HostBaseAddress, OptionalHeader->SizeOfHeaders);
 	CopyMem((VOID*)HostBaseAddress, (VOID*)&g_InexorableEfi, OptionalHeader->SizeOfHeaders);
 	
-	DebugPrint0402("Copying sections.\n");
+	DebugPrint0402("LoadFirmware: Copying sections.\n");
 
 	EFI_IMAGE_SECTION_HEADER* Section = (EFI_IMAGE_SECTION_HEADER*)((UINT8*)OptionalHeader + NtHeaders->FileHeader.SizeOfOptionalHeader);
 
@@ -204,7 +209,7 @@ LoadFirmware(
 		UINT8*	Source				= (UINT8*)&g_InexorableEfi + Section->PointerToRawData;
 		UINTN	RemainingBytes		= Section->SizeOfRawData;
 
-		DebugPrint0402("Section %.8a. Virtual Address = 0x%p, Size of Raw Data = 0x%p\n", &Section->Name, Section->VirtualAddress, Section->SizeOfRawData);
+		//DebugPrint0402("LoadFirmware: Section %.8a. Virtual Address = 0x%p, Size of Raw Data = 0x%p\n", &Section->Name, Section->VirtualAddress, Section->SizeOfRawData);
 
 		//
 		// Guest's memory is contiguous. But the host's memory is not. We have to recalculate for each page.
@@ -254,7 +259,7 @@ LoadFirmware(
 	}
 
 	*GuestEntryPoint = (VOID*)(UINT64)OptionalHeader->AddressOfEntryPoint + FIRMWARE_IMAGE_BASE;
-	DebugPrint0402("Firmware mapped. ImageSize = 0x%p, ImageBase= 0x%p\n", OptionalHeader->SizeOfImage, FIRMWARE_IMAGE_BASE);
+	DebugPrint0402("LoadFirmware: Firmware mapped. ImageSize = 0x%p, ImageBase = 0x%p, EntryPointt = 0x%p\n", OptionalHeader->SizeOfImage, FIRMWARE_IMAGE_BASE, *GuestEntryPoint);
 
 	return EFI_SUCCESS;
 }
@@ -273,13 +278,14 @@ MapMemory(
 	g_VmState.AddressSpace.Eptp.MemoryType = 6;
 	g_VmState.AddressSpace.Eptp.Pml4Address = ((UINT64)&g_VmState.AddressSpace.Epml4) >> 12;
 
-	DebugPrint0402("g_Eptp = 0x%p\n", g_VmState.AddressSpace.Eptp.All);
+	DebugPrint0402("MapMemory: g_Eptp = 0x%p\n", g_VmState.AddressSpace.Eptp.All);
 
 	g_VmState.AddressSpace.HostCr3.PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.IdentityPml4[0]) >> 12;
 
 	g_VmState.AddressSpace.IdentityPml4[0].Present = TRUE;
 	g_VmState.AddressSpace.IdentityPml4[0].Write = TRUE;
 	g_VmState.AddressSpace.IdentityPml4[0].PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.IdentityPdpe[0]) >> 12;
+
 
 	//
 	// Why not map the first 4GB only?
@@ -295,7 +301,7 @@ MapMemory(
 		g_VmState.AddressSpace.IdentityPdpe[i].PhysicalAddress = i;
 	}
 
-	DebugPrint0402("HostCr3 = 0x%p\n", g_VmState.AddressSpace.HostCr3.All);
+	DebugPrint0402("MapMemory: HostCr3 = 0x%p\n", g_VmState.AddressSpace.HostCr3.All);
 
 	//
 	// Copy current host GDT / IDT into SharedState so the host has valid
@@ -315,7 +321,7 @@ MapMemory(
 	}
 	g_VmState.SharedState.HostTssBase = g_VmState.SharedState.HostTss;
 
-	DebugPrint0402("Mapping out free memory...\n");
+	DebugPrint0402("MapMemory: Mapping out free memory...\n");
 
 	UINTN Pages = EFI_SIZE_TO_PAGES(GUEST_ADDRESS_SPACE_SIZE);
 	EFI_PHYSICAL_ADDRESS GuestAddressSpaceBeginning = 0;
@@ -325,16 +331,16 @@ MapMemory(
 	//
 	EFI_STATUS Status = gBS->AllocatePages(AllocateAnyPages, EfiRuntimeServicesData, Pages, &GuestAddressSpaceBeginning);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to allocate pages for guest's address space. %r", Status);
+		DebugPrint0402("MapMemory: Failed to allocate pages for guest's address space. %r", Status);
 		return Status;
 	}
 
 	if (!MapPagesLinear((UINT64)GuestAddressSpaceBeginning, Pages, &g_CurrentGuestPhysicalAddress)) {
-		DebugPrint0402("Failed to map %d pages HPA 0x%p to GPA 0x%p\n", Pages, GuestAddressSpaceBeginning, g_CurrentGuestPhysicalAddress);
+		DebugPrint0402("MapMemory: Failed to map %d pages HPA 0x%p to GPA 0x%p\n", Pages, GuestAddressSpaceBeginning, g_CurrentGuestPhysicalAddress);
 		return EFI_NO_MAPPING;
 	}
 
-	DebugPrint0402("Mapped 0x%p-0x%p for guest\n", GuestAddressSpaceBeginning, g_CurrentGuestPhysicalAddress);
+	DebugPrint0402("MapMemory: Mapped 0x%p-0x%p for guest\n", GuestAddressSpaceBeginning, g_CurrentGuestPhysicalAddress);
 
 	//
 	// Setup guest firmware memory.
@@ -369,7 +375,7 @@ MapMemory(
 	}
 
 	g_VmState.AddressSpace.GuestCr3 = Pml4Gpa;
-	DebugPrint0402("Guest CR3 = 0x%p (GPA)\n", g_VmState.AddressSpace.GuestCr3);
+	DebugPrint0402("MapMemory: Guest CR3 = 0x%p\n", g_VmState.AddressSpace.GuestCr3);
 
 	//
 	// Allocate HLT section for APs.
@@ -386,7 +392,7 @@ MapMemory(
 	ApHaltHost[1] = 0xF4;  // hlt
 	ApHaltHost[2] = 0xEB;  // jmp $-2
 	ApHaltHost[3] = 0xFE;  // (opcode for JMP)
-	DebugPrint0402("AP HLT page at GPA 0x%p\n", ApHaltGpa);
+	DebugPrint0402("MapMemory: AP HLT page at GPA 0x%p\n", ApHaltGpa);
 
 	g_VmState.Firmware.ApHaltSection = ApHaltGpa;
 
@@ -505,7 +511,7 @@ UefiMain(
 	gBS = SystemTable->BootServices;
 	gRT = SystemTable->RuntimeServices;
 
-	DebugPrint0402("Welcome to Catalyst - Inexorable Hypervisor\n");
+	DebugPrint0402("UefiMain: Welcome to Catalyst - Inexorable Hypervisor\n");
 
 	EFI_LOADED_IMAGE_PROTOCOL* LoadedImage = NULL;
 
@@ -524,7 +530,7 @@ UefiMain(
 		}
 	}
 
-	DebugPrint0402("Failed to open LoadedImageProtocol: %r\n", Status);
+	DebugPrint0402("UefiMain: Failed to open LoadedImageProtocol: %r\n", Status);
 
 	//
 	// VMX support must be present.
@@ -550,7 +556,7 @@ UefiMain(
 	//
 	Status = MapMemory();
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to map memory: %r\n", Status);
+		DebugPrint0402("UefiMain: FAIL: Failed to map memory: %r\n", Status);
 		return Status;
 	}
 
@@ -560,22 +566,22 @@ UefiMain(
 	VOID* GuestRIP = 0;
 	Status = LoadFirmware(&GuestRIP);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to load firmware: %r\n", Status);
+		DebugPrint0402("UefiMain: FAIL: Failed to load firmware: %r\n", Status);
 		return Status;
 	}
 
-	DebugPrint0402("Initializing APs...\n");
+	DebugPrint0402("UefiMain: Initializing APs...\n");
 
 	//
 	// All processors must be woken up and ready.
 	//
 	Status = PrepareProcessors(GuestRIP);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to prepare processors: %r\n", Status);
+		DebugPrint0402("UefiMain: FAIL: Failed to prepare processors: %r\n", Status);
 		return Status;
 	}
 
-	DebugPrint0402("Virtualizing system...\n");
+	DebugPrint0402("UefiMain: Virtualizing system...\n");
 
 	//
 	// Virtualize em' all.

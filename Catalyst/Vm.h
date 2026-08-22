@@ -8,7 +8,10 @@
 ////			  Definitions			   ////
 ///////////////////////////////////////////////
 
-#define FIRMWARE_IMAGE_BASE			0x1000
+//
+// It's recommended to put firmware above 0x10000 mark since MapMemory will utilize the first few kilobytes of memory as soon as the mapping is done.
+//
+#define FIRMWARE_IMAGE_BASE			0x10000
 
 #define BSP_INITIAL_STACK_SIZE		0x4000
 
