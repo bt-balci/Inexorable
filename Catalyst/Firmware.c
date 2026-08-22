@@ -903,17 +903,20 @@ FindReplicaInfo(
 	IN EFI_GUID* Guid
 )
 {
-	DebugPrint0402("Looking up protocol GUID=%g\n", Guid);
+	DebugPrint0402("FindReplicaInfo: Looking up protocol GUID=%g\n", Guid);
 
-	for (UINTN i = 0; i < ARRAY_SIZE(mReplicaTable); i++)
-		if (CompareGuid(Guid, mReplicaTable[i].Guid))
+	for (UINTN i = 0; i < ARRAY_SIZE(mReplicaTable); i++) {
+		DebugPrint0402("FindReplicaInfo: Comparing to GUID=%g...\n", &mReplicaTable[i].Guid);
+
+		if (CompareGuid(Guid, &mReplicaTable[i].Guid))
 		{
-			DebugPrint0402("Found protocol at index %d, Size=%d, NumFuncs=%d\n",
+			DebugPrint0402("FindReplicaInfo: Found protocol at index %d, Size=%d, NumFuncs=%d\n",
 				i, mReplicaTable[i].Size, mReplicaTable[i].NumFuncs);
 			return &mReplicaTable[i];
 		}
+	}
 
-	DebugPrint0402("Protocol not found in replica table!\n");
+	DebugPrint0402("FindReplicaInfo: Protocol not found in replica table!\n");
 
 	return NULL;
 }
@@ -933,11 +936,11 @@ GenerateProtocolCallStub(
 	IN UINTN	FuncIndex,
 	IN GUID*	Guid
 ) {
-	DebugPrint0402("HostThis=0x%p, HostFunc=0x%p, FuncIndex=%d, GUID=%g\n", HostThis, HostFunc, FuncIndex, Guid);
+	DebugPrint0402("GenerateProtocolCallStub: HostThis=0x%p, HostFunc=0x%p, FuncIndex=%d, GUID=%g\n", HostThis, HostFunc, FuncIndex, Guid);
 
 	CONST PROTOCOL_REPLICA_INFO* ReplicaInfo = FindReplicaInfo(Guid);
 	if (ReplicaInfo == NULL) {
-		DebugPrint0402("Protocol not in replica table.\n");
+		DebugPrint0402("GenerateProtocolCallStub: FAIL: Protocol not in replica table!\n");
 		return 0;
 	}
 
@@ -947,11 +950,11 @@ GenerateProtocolCallStub(
 	//
 	EFI_STATUS Status = GuestAllocatePool(17, &GuestMem);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to allocate 17 bytes in guest memory: %r\n", Status);
+		DebugPrint0402("GenerateProtocolCallStub: FAIL: Failed to allocate 17 bytes in guest memory: %r\n", Status);
 		return 0;
 	}
 
-	DebugPrint0402("Allocated guest stub at GPA=0x%p\n", GuestMem);
+	DebugPrint0402("GenerateProtocolCallStub: Allocated guest stub at GPA=0x%p\n", GuestMem);
 
 	//
 	// INVARIANT: Our pool allocator is a page allocator in disguise. So we can do this trickery.
@@ -964,12 +967,12 @@ GenerateProtocolCallStub(
 	// (Says the guy after ignoring every C concurrency principle)
 	//
 	if (!TranslateGuestAddressToHostAddress(GuestCr3, GuestMem, (VOID**)&StubPtr)) {
-		DebugPrint0402("Could not translate guest to host address for GPA=0x%llx\n", GuestMem);
+		DebugPrint0402("GenerateProtocolCallStub: FAIL: Could not translate guest to host address for GPA=0x%llx\n", GuestMem);
 		GuestFreePool(GuestMem);
 		return 0;
 	}
 
-	DebugPrint0402("Host virtual address for stub: 0x%p\n", StubPtr);
+	DebugPrint0402("GenerateProtocolCallStub: Host virtual address for stub: 0x%p\n", StubPtr);
 
 	//
 	// Allocate space for call metadata.
@@ -977,12 +980,12 @@ GenerateProtocolCallStub(
 	PROTOCOL_STUB_CONTEXT* CallData = NULL;
 	Status = gBS->AllocatePool(EfiRuntimeServicesData, sizeof(PROTOCOL_STUB_CONTEXT), (VOID**)&CallData);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to allocate host context: %r\n", Status);
+		DebugPrint0402("GenerateProtocolCallStub: FAIL: Cannot allocate host context: %r\n", Status);
 		GuestFreePool(GuestMem);
 		return 0;
 	}
 
-	DebugPrint0402("Allocated PROTOCOL_STUB_CONTEXT at 0x%p\n", CallData);
+	DebugPrint0402("GenerateProtocolCallStub: Allocated PROTOCOL_STUB_CONTEXT at 0x%p\n", CallData);
 
 	//
 	// Setup call metadata.
@@ -993,7 +996,7 @@ GenerateProtocolCallStub(
 	CallData->FuncIndex = FuncIndex;
 	CallData->HostThis = HostThis;
 
-	DebugPrint0402("Context filled. HostFunc=0x%p, FuncIndex=%d, HostThis=0x%p\n", HostFunc, FuncIndex, HostThis);
+	DebugPrint0402("GenerateProtocolCallStub: Context filled. HostFunc=0x%p, FuncIndex=%d, HostThis=0x%p\n", HostFunc, FuncIndex, HostThis);
 
 	//
 	// Shellcodemaxxing.
@@ -1012,8 +1015,8 @@ GenerateProtocolCallStub(
 
 	StubPtr[16] = 0xC3; // return
 
-	DebugPrint0402("Stub code written at 0x%p, context pointer=0x%p\n", StubPtr, CallData);
-	DebugPrint0402("Returning guest stub address 0x%llx\n", GuestMem);
+	DebugPrint0402("GenerateProtocolCallStub: Stub code written at 0x%p, context pointer=0x%p\n", StubPtr, CallData);
+	DebugPrint0402("GenerateProtocolCallStub: Returning guest stub address 0x%llx\n", GuestMem);
 
 	return GuestMem;
 }
@@ -1027,15 +1030,15 @@ ReplicateProtocol(
 	IN VOID*		HostInterface,
 	OUT UINT64*		GuestInterface
 ) {
-	DebugPrint0402("GUID=%g, HostInterface=0x%p\n", Guid, HostInterface);
+	DebugPrint0402("ReplicateProtocol: GUID=%g, HostInterface=0x%p\n", Guid, HostInterface);
 
 	CONST PROTOCOL_REPLICA_INFO* Info = FindReplicaInfo(Guid);
 	if (Info == NULL) {
-		DebugPrint0402("Protocol not found in replica table.\n");
+		DebugPrint0402("ReplicateProtocol: FAIL: Protocol not found in replica table.\n");
 		return EFI_NOT_FOUND;
 	}
 
-	DebugPrint0402("Found replica info, Size=%d, NumFuncs=%d\n", Info->Size, Info->NumFuncs);
+	DebugPrint0402("ReplicateProtocol: Found replica info, Size=%d, NumFuncs=%d\n", Info->Size, Info->NumFuncs);
 
 	//
 	// Allocate pool to hold guest protocol replica.
@@ -1043,17 +1046,17 @@ ReplicateProtocol(
 	//
 	EFI_STATUS Status = GuestAllocatePool(Info->Size, GuestInterface);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to allocate guest pool for replica: %r\n", Status);
+		DebugPrint0402("ReplicateProtocol: FAIL: Failed to allocate guest pool for replica: %r\n", Status);
 		return Status;
 	}
 
-	DebugPrint0402("Allocated guest replica at GPA=0x%llx\n", *GuestInterface);
+	DebugPrint0402("ReplicateProtocol: Allocated guest replica at GPA=0x%llx\n", *GuestInterface);
 
 	//
 	// Copy original protocol to guest.
 	//
 	if (!CopyToGuest(GuestCr3, HostInterface, *GuestInterface, Info->Size)) {
-		DebugPrint0402("CopyToGuest of host interface to guest failed!\n");
+		DebugPrint0402("ReplicateProtocol: FAIL: Copying host interface to guest failed.\n");
 		return EFI_INVALID_PARAMETER;
 	}
 
@@ -1062,25 +1065,25 @@ ReplicateProtocol(
 		VOID** HostFuncPtr = (VOID**)((UINT8*)HostInterface + Offset);
 		VOID* HostFunc = *HostFuncPtr;
 		
-		DebugPrint0402("Function[%d] at offset 0x%x, HostFunc=0x%p\n", i, Offset, HostFunc);
+		DebugPrint0402("ReplicateProtocol: Function[%d] at offset 0x%x, HostFunc=0x%p\n", i, Offset, HostFunc);
 
 		UINT64 Stub = GenerateProtocolCallStub(GuestCr3, HostInterface, HostFunc, i, Guid);
 		if (Stub == 0) {
-			DebugPrint0402("Failed to generate stub for function %d!\n", i);
+			DebugPrint0402("ReplicateProtocol: FAIL: Cannot generate stub for function %d\n", i);
 			return EFI_OUT_OF_RESOURCES;
 		}
-		DebugPrint0402("Generated stub for function %d at GPA=0x%p\n", i, Stub);
+		DebugPrint0402("ReplicateProtocol: Generated stub for function %d at GPA=0x%p\n", i, Stub);
 
 		UINT64 GuestFuncPtr = (UINT64)((UINT8*)*GuestInterface + Offset);
 		if (!CopyToGuest(GuestCr3, (VOID*)&Stub, GuestFuncPtr, sizeof(Stub))) {
-			DebugPrint0402("Failed to write stub pointer to guest at GPA=0x%p\n", GuestFuncPtr);
+			DebugPrint0402("ReplicateProtocol: FAIL: Failed to write stub pointer to guest at GPA=0x%p\n", GuestFuncPtr);
 			return EFI_INVALID_PARAMETER;
 		}
 
-		DebugPrint0402("Patched function pointer at offset 0x%x -> stub 0x%p\n", Offset, Stub);
+		DebugPrint0402("ReplicateProtocol: Patched function pointer at offset 0x%x -> stub 0x%p\n", Offset, Stub);
 	}
 
-	DebugPrint0402("Success, guest interface at 0x%p\n", *GuestInterface);
+	DebugPrint0402("ReplicateProtocol: SUCCESS. Guest interface at 0x%p\n", *GuestInterface);
 	return EFI_SUCCESS;
 }
 
@@ -1089,19 +1092,19 @@ EFIAPI
 FirmwareExecuteProtocol(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 ) {
-	DebugPrint0402("Guest RIP=0x%llx, RSP=0x%llx\n", Cpu->Context.Rip, Cpu->Context.Rsp);
+	DebugPrint0402("FirmwareExecuteProtocol: Guest RIP=0x%llx, RSP=0x%llx\n", Cpu->Context.Rip, Cpu->Context.Rsp);
 
 	PROTOCOL_STUB_CONTEXT* Context = NULL;
 	//
 	// 3 for vmcall length.
 	//
 	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Context, Cpu->Context.Rip + 3, sizeof(Context))) {
-		DebugPrint0402("Failed to read context pointer from guest memory!\n");
+		DebugPrint0402("FirmwareExecuteProtocol: FAIL: Cannot read context pointer from guest memory!\n");
 		goto EndPageFault;
 	}
 
-	DebugPrint0402("Context pointer = 0x%p\n", Context);
-	DebugPrint0402("Context details: HostFunc=0x%p, FuncIndex=%d, HostThis=0x%p, NumArgs=%d\n",
+	DebugPrint0402("FirmwareExecuteProtocol: Context pointer = 0x%p\n", Context);
+	DebugPrint0402("FirmwareExecuteProtocol: Context details: HostFunc=0x%p, FuncIndex=%d, HostThis=0x%p, NumArgs=%d\n",
 		Context->HostFunc, Context->FuncIndex, Context->HostThis,
 		Context->Info.NumArgs[Context->FuncIndex]);
 
@@ -1109,7 +1112,7 @@ FirmwareExecuteProtocol(
 	// See the last comment in GenerateProtocolCallStub.
 	//
 	Cpu->Context.Rip += 8;
-	DebugPrint0402("Advanced RIP to 0x%p (should point to RET btw)\n", Cpu->Context.Rip);
+	DebugPrint0402("FirmwareExecuteProtocol: Advanced RIP to 0x%p (should point to RET btw)\n", Cpu->Context.Rip);
 
 	//
 	// Babe, wake up. There's an UEFI protocol functionn with more than 16 arguments.
@@ -1118,17 +1121,17 @@ FirmwareExecuteProtocol(
 	UINTN i;
 	for (i = 0; i < MIN(Context->Info.NumArgs, (UINTN)4); i++) {
 		GuestArgs[i] = ((UINT64[]) { Cpu->Context.Rcx, Cpu->Context.Rdx, Cpu->Context.R8, Cpu->Context.R9 }[i]);
-		DebugPrint0402("GuestArg[%d] (register) = 0x%p\n", i, GuestArgs[i]);
+		DebugPrint0402("FirmwareExecuteProtocol: GuestArg[%d] (register) = 0x%p\n", i, GuestArgs[i]);
 	}
 
 	UINT64 GuestRsp = Cpu->Context.Rsp + 40;
 	for (; i < Context->Info.NumArgs; i++) {
 		if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, &GuestArgs[i], GuestRsp, sizeof(UINT64))) {
-			DebugPrint0402("Failed to read stack arg %d from guest RSP+0x%x\n", i, GuestRsp - (Cpu->Context.Rsp + 40));
+			DebugPrint0402("FirmwareExecuteProtocol: Failed to read stack arg %d from guest RSP+0x%x\n", i, GuestRsp - (Cpu->Context.Rsp + 40));
 			goto EndPageFault;
 		}
 
-		DebugPrint0402("GuestArg[%d] (stack) = 0x%p\n", i, GuestArgs[i]);
+		DebugPrint0402("FirmwareExecuteProtocol: GuestArg[%d] (stack) = 0x%p\n", i, GuestArgs[i]);
 		GuestRsp += 8;
 	}
 
@@ -1140,14 +1143,14 @@ FirmwareExecuteProtocol(
 
 	CallArgs[0] = (UINT64)Context->HostThis;
 
-	DebugPrint0402("Set CallArgs[0] (This) = 0x%p\n", Context->HostThis);
+	DebugPrint0402("FirmwareExecuteProtocol: Set CallArgs[0] (This) = 0x%p\n", Context->HostThis);
 
 	for (i = 1; i < Context->Info.NumArgs; i++) {
 		MarshalArgumentDirection Direction = ArgDesc[i].Direction;
 		MarshalArgumentType Type = ArgDesc[i].Type;
 		INTN SizeIdx = ArgDesc[i].SizeArgIndex;
 
-		DebugPrint0402("Marshaling argument %d: Direction=%d, Type=%d, SizeIdx=%d, GuestVal=0x%p\n", i, Direction, Type, SizeIdx, GuestArgs[i]);
+		DebugPrint0402("FirmwareExecuteProtocol: Marshaling argument %d: Direction=%d, Type=%d, SizeIdx=%d, GuestVal=0x%p\n", i, Direction, Type, SizeIdx, GuestArgs[i]);
 
 		if (Direction == ArgDirectionConstPtr || Type == ArgTypePointer) {
 			//
@@ -1156,7 +1159,7 @@ FirmwareExecuteProtocol(
 			//
 			CallArgs[i] = GuestArgs[i];
 
-			DebugPrint0402("Forwarding pointer/opaque arg %d: 0x%p\n", i, GuestArgs[i]);
+			DebugPrint0402("FirmwareExecuteProtocol: Forwarding pointer/opaque arg %d: 0x%p\n", i, GuestArgs[i]);
 		}
 		else if (Type == ArgTypeBuffer) {
 			//
@@ -1173,12 +1176,12 @@ FirmwareExecuteProtocol(
 					BufferSize = (UINTN)GuestArgs[SizeIdx];
 				}
 			}
-			DebugPrint0402("Buffer argument %d: Calculated buffer size = 0x%p\n", i, BufferSize);
+			DebugPrint0402("FirmwareExecuteProtocol: Buffer argument %d: Calculated buffer size = 0x%p\n", i, BufferSize);
 
 			if (BufferSize > 0) {
 				EFI_STATUS Status = gBS->AllocatePool(EfiRuntimeServicesData, BufferSize, &TempBufs[i]);
 				if (EFI_ERROR(Status)) {
-					DebugPrint0402("Failed to allocate temp buffer: %r\n", Status);
+					DebugPrint0402("FirmwareExecuteProtocol: FAIL: Cannot allocatte temp buffer: %r\n", Status);
 					Cpu->Context.Rax = Status;
 					goto Cleanup;
 				}
@@ -1187,17 +1190,17 @@ FirmwareExecuteProtocol(
 
 				if (Direction == ArgDirectionIn || Direction == ArgDirectionOut) {
 					if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, TempBufs[i], GuestArgs[i], BufferSize)) {
-						DebugPrint0402("CopyFromGuest for buffer argument %d failed!\n", i);
+						DebugPrint0402("FirmwareExecuteProtocol: FAIL: Cannot copy buffer argument %d\n", i);
 						goto EndPageFault;
 					}
 
-					DebugPrint0402("Copied %d bytes from guest buffer 0x%p to host 0x%p\n", BufferSize, GuestArgs[i], TempBufs[i]);
+					DebugPrint0402("FirmwareExecuteProtocol: Copied %d bytes from guest buffer 0x%p to host 0x%p\n", BufferSize, GuestArgs[i], TempBufs[i]);
 				}
 				CallArgs[i] = (UINT64)TempBufs[i];
 			}
 			else {
 				CallArgs[i] = GuestArgs[i];  // Might be NULL
-				DebugPrint0402("Buffer size 0, forwarding guest value 0x%p\n", GuestArgs[i]);
+				DebugPrint0402("FirmwareExecuteProtocol: Buffer size 0, forwarding guest value 0x%p\n", GuestArgs[i]);
 			}
 		}
 		else if (Type == ArgTypeProtocolPtr && Direction == ArgDirectionOut) {
@@ -1205,18 +1208,18 @@ FirmwareExecuteProtocol(
 			// We'll handle after the call
 			//
 			CallArgs[i] = 0;
-			DebugPrint0402("Protocol OUT pointer argument %d. placeholder set\n", i);
+			DebugPrint0402("FirmwareExecuteProtocol: Protocol OUT pointer argument %d. placeholder set\n", i);
 		}
 		else {
 			//
-			// Scalar. Forward value
+			// Integer. Forward value
 			//
 			CallArgs[i] = GuestArgs[i];
-			DebugPrint0402("Scalar argument %d forwarded = 0x%p\n", i, GuestArgs[i]);
+			DebugPrint0402("FirmwareExecuteProtocol: Integer argument %d forwarded = 0x%p\n", i, GuestArgs[i]);
 		}
 	}
 
-	DebugPrint0402("Calling HostFunc at 0x%p with 16 args...\n", Context->HostFunc);
+	DebugPrint0402("FirmwareExecuteProtocol: Calling HostFunc at 0x%p with 16 args...\n", Context->HostFunc);
 
 	//
 	// >Muh standards
@@ -1228,7 +1231,7 @@ FirmwareExecuteProtocol(
 		CallArgs[12], CallArgs[13], CallArgs[14], CallArgs[15]
 		);
 
-	DebugPrint0402("Host function returned 0x%p (%r)\n", Result, Result);
+	DebugPrint0402("FirmwareExecuteProtocol: Host function returned 0x%p (%r)\n", Result, Result);
 
 	//
 	// Post call processing.
@@ -1237,7 +1240,7 @@ FirmwareExecuteProtocol(
 		MarshalArgumentDirection Direction = ArgDesc[i].Direction;
 		MarshalArgumentType Type = ArgDesc[i].Type;
 
-		DebugPrint0402("Post-processing arg %d, Direction=%d, Type=%d\n", i, Direction, Type);
+		DebugPrint0402("FirmwareExecuteProtocol: Post-processing arg %d, Direction=%d, Type=%d\n", i, Direction, Type);
 
 		if (TempBufs[i]) {
 			if (Direction == ArgDirectionOut || Direction == ArgDirectionInOut) {
@@ -1248,9 +1251,9 @@ FirmwareExecuteProtocol(
 					// We should re-read the size from the guest pointer if it's IN_OUT.
 					//
 
-					DebugPrint0402("Copying back %d bytes to guest buffer 0x%p\n", bytesToCopy, GuestArgs[i]);
+					DebugPrint0402("FirmwareExecuteProtocol: Copying back %d bytes to guest buffer 0x%p\n", bytesToCopy, GuestArgs[i]);
 					if (!CopyToGuest(Cpu->ExtendedContext.Cr3, TempBufs[i], GuestArgs[i], bytesToCopy)) {
-						DebugPrint0402("CopyToGuest failed for buffer arg %d!\n", i);
+						DebugPrint0402("FirmwareExecuteProtocol: FAIL: Cannot copy buffer argument back %d\n", i);
 						goto CleanupFail;
 					}
 				}
@@ -1265,26 +1268,26 @@ FirmwareExecuteProtocol(
 		if (Type == ArgTypeProtocolPtr && Direction == ArgDirectionOut) {
 			VOID* HostProtPtr = (VOID*)CallArgs[i];  // This was filled by the call.
 
-			DebugPrint0402("Replicating returned protocol at 0x%p\n", HostProtPtr);
+			DebugPrint0402("FirmwareExecuteProtocol: Replicating returned protocol at 0x%p\n", HostProtPtr);
 
 			if (HostProtPtr) {
 				UINT64 GuestProtPtr;
-				EFI_STATUS Status = ReplicateProtocol(Cpu->ExtendedContext.Cr3, Context->Info.Guid, HostProtPtr, &GuestProtPtr);
+				EFI_STATUS Status = ReplicateProtocol(Cpu->ExtendedContext.Cr3, &Context->Info.Guid, HostProtPtr, &GuestProtPtr);
 				if (EFI_ERROR(Status)) {
-					DebugPrint0402("ReplicateProtocol failed: %r\n", Status);
+					DebugPrint0402("FirmwareExecuteProtocol: FAIL: Replicateprtocol failed: %r\n", Status);
 				}
 				else {
-					DebugPrint0402("Writing guest replica pointer 0x%p to arg %d\n", GuestProtPtr, i);
+					DebugPrint0402("FirmwareExecuteProtocol: Writing guest replica pointer 0x%p to arg %d\n", GuestProtPtr, i);
 					if (!CopyToGuest(Cpu->ExtendedContext.Cr3, &GuestProtPtr, GuestArgs[i], sizeof(VOID*))) {
-						DebugPrint0402("Failed to write protocol pointer to guest!\n");
+						DebugPrint0402("FirmwareExecuteProtocol: FAIL: Cannot write protocol pointer to guest\n");
 						goto CleanupFail;
 					}
 				}
 			}
 			else {
-				DebugPrint0402("Protocol OUT pointer is NULL, writing NULL to guest\n");
+				DebugPrint0402("FirmwareExecuteProtocol: Protocol OUT pointer is NULL, writing NULL to guest\n");
 				if (!CopyToGuest(Cpu->ExtendedContext.Cr3, &HostProtPtr, GuestArgs[i], sizeof(VOID*))) {
-					DebugPrint0402("Failed to write NULL to guest!\n");
+					DebugPrint0402("FirmwareExecuteProtocol: Cannot write NULL to guest\n");
 					goto CleanupFail;
 				}
 			}
@@ -1292,7 +1295,7 @@ FirmwareExecuteProtocol(
 	}
 
 	Cpu->Context.Rax = Result;
-	DebugPrint0402("Done, returning RAX=%r\n", Result);
+	DebugPrint0402("FirmwareExecuteProtocol: Done, returning RAX=%r\n", Result);
 
 Cleanup:
 	for (UINTN j = 1; j < Context->Info.NumArgs; j++) {
@@ -1397,7 +1400,7 @@ FirmwareLocateProtocol(
 		return;
 	}
 
-	UINT64 GuidPtr = Cpu->Context.Rdx;
+	UINT64 GuidPtr = Cpu->Context.Rcx;
 	EFI_GUID Guid = { 0 };
 
 	UINT64 GuestInterface = 0;
@@ -1416,6 +1419,10 @@ FirmwareLocateProtocol(
 
 	Cpu->Context.Rax = gBS->LocateProtocol(&Guid, NULL, &Interface);
 	DebugPrint0402("Host LocateProtocol returned %r, Interface = 0x%p\n", Cpu->Context.Rax, Interface);
+
+	if (EFI_ERROR(Cpu->Context.Rax)) {
+		return;
+	}
 
 	EFI_STATUS Status = ReplicateProtocol(Cpu->ExtendedContext.Cr3, &Guid, Interface, &GuestInterface);
 	DebugPrint0402("ReplicateProtocol returned %r, GuestInterface = 0x%p\n", Status, GuestInterface);

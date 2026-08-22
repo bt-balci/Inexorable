@@ -27,8 +27,25 @@ TestMain(
 
 	EFI_STATUS Status = gBS.LocateProtocol(&gEfiGraphicsOutputProtocolGuid, NULL, (VOID**)&Gop);
 	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to locate Graphics Output Protocol: %r\n", Status);
+		DebugPrint0402("[GUEST] Failed to locate Graphics Output Protocol: %r\n", Status);
 		return;
+	}
+
+	DebugPrint0402("[GUEST] Graphics Output Protocol at: 0x%p\n", Gop);
+
+	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.HResolution: %d\n", Gop->Mode->Info->HorizontalResolution);
+	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.VResolution: %d\n", Gop->Mode->Info->VerticalResolution);
+
+	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.FrameBufferBase: 0x%p\n", Gop->Mode->FrameBufferBase);
+	DebugPrint0402("[GUEST] Graphics Output Protocol Mode.FrameBufferSize: 0x%p\n", Gop->Mode->FrameBufferSize);
+
+	//
+	// Blue
+	//
+	EFI_GRAPHICS_OUTPUT_BLT_PIXEL Color = { 0, 0, 255, 0 };
+
+	if (EFI_ERROR(Gop->Blt(Gop, &Color, EfiBltVideoFill, 0, 0, 0, 0, Gop->Mode->Info->HorizontalResolution, Gop->Mode->Info->VerticalResolution, 0))) {
+		DebugPrint0402("[GUEST] Failed to call Blt: %r\n", Status);
 	}
 }
 
@@ -37,7 +54,7 @@ EFIAPI
 UefiMain(
 	VOID
 ) {
-	DebugPrint0402("Inexorable - As if it was always there. (It never was)\n");
+	DebugPrint0402("[GUEST] Inexorable - As if it was always there. (It never was)\n");
 
 	//
 	// Setup system table.

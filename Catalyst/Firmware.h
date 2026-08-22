@@ -191,7 +191,7 @@ typedef struct {
 } FUNC_ARG_DESC;
 
 typedef struct {
-	EFI_GUID* Guid;
+	EFI_GUID Guid;
 	UINTN Size;
 	UINTN NumFuncs;
 	UINTN Offsets[MAX_FUNCS_PER_PROTOCOL];
@@ -212,7 +212,7 @@ STATIC CONST PROTOCOL_REPLICA_INFO mReplicaTable[] = {
 
 	// ===== EFI_BLOCK_IO2_PROTOCOL =====
 	{
-	  .Guid = &gEfiBlockIo2ProtocolGuid,
+	  .Guid = EFI_BLOCK_IO2_PROTOCOL_GUID,
 	  .Size = sizeof(EFI_BLOCK_IO2_PROTOCOL),
 	  .NumFuncs = 4,
 	  .Offsets = {
@@ -252,7 +252,7 @@ STATIC CONST PROTOCOL_REPLICA_INFO mReplicaTable[] = {
 
 	// ===== EFI_LOADED_IMAGE_PROTOCOL =====
 	{
-	  .Guid = &gEfiLoadedImageProtocolGuid,
+	  .Guid = EFI_LOADED_IMAGE_PROTOCOL_GUID,
 	  .Size = sizeof(EFI_LOADED_IMAGE_PROTOCOL),
 	  .NumFuncs = 1,
 	  .Offsets = {
@@ -268,7 +268,7 @@ STATIC CONST PROTOCOL_REPLICA_INFO mReplicaTable[] = {
 
 	// ===== EFI_SIMPLE_FILE_SYSTEM_PROTOCOL =====
 	{
-	  .Guid = &gEfiSimpleFileSystemProtocolGuid,
+	  .Guid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID,
 	  .Size = sizeof(EFI_SIMPLE_FILE_SYSTEM_PROTOCOL),
 	  .NumFuncs = 1,
 	  .Offsets = {
@@ -285,7 +285,7 @@ STATIC CONST PROTOCOL_REPLICA_INFO mReplicaTable[] = {
 
 	// ===== EFI_GRAPHICS_OUTPUT_PROTOCOL =====
 	{
-	  .Guid = &gEfiGraphicsOutputProtocolGuid,
+	  .Guid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID,
 	  .Size = sizeof(EFI_GRAPHICS_OUTPUT_PROTOCOL),
 	  .NumFuncs = 3,
 	  .Offsets = {
@@ -322,7 +322,7 @@ STATIC CONST PROTOCOL_REPLICA_INFO mReplicaTable[] = {
 
 	// ===== EFI_RNG_PROTOCOL =====
 	{
-	  .Guid = &gEfiRngProtocolGuid,
+	  .Guid = EFI_RNG_PROTOCOL_GUID,
 	  .Size = sizeof(EFI_RNG_PROTOCOL),
 	  .NumFuncs = 2,
 	  .Offsets = {
@@ -347,7 +347,7 @@ STATIC CONST PROTOCOL_REPLICA_INFO mReplicaTable[] = {
 
 	// ===== EFI_LOAD_FILE2_PROTOCOL =====
 	{
-	  .Guid = &gEfiLoadFile2ProtocolGuid,
+	  .Guid = EFI_LOAD_FILE2_PROTOCOL_GUID,
 	  .Size = sizeof(EFI_LOAD_FILE2_PROTOCOL),
 	  .NumFuncs = 1,
 	  .Offsets = {
@@ -367,7 +367,7 @@ STATIC CONST PROTOCOL_REPLICA_INFO mReplicaTable[] = {
 
 	// ===== EFI_DEVICE_PATH_TO_TEXT_PROTOCOL =====
 	{
-	  .Guid = &gEfiDevicePathToTextProtocolGuid,
+	  .Guid = EFI_DEVICE_PATH_TO_TEXT_PROTOCOL_GUID,
 	  .Size = sizeof(EFI_DEVICE_PATH_TO_TEXT_PROTOCOL),
 	  .NumFuncs = 2,
 	  .Offsets = {
