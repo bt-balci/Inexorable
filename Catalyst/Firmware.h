@@ -127,6 +127,39 @@ FirmwareExecuteProtocol(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 );
 
+
+///////////////////////////////////////////////
+////			  Guest Services	  	   ////
+///////////////////////////////////////////////
+
+EFI_STATUS
+EFIAPI
+GuestFindFreePages(
+	IN EFI_ALLOCATE_TYPE	AllocationType,
+	IN UINTN				Pages,
+	IN OUT UINT64* OutPageBase
+);
+
+EFI_STATUS
+EFIAPI
+GuestAllocatePool(
+	IN UINTN	Size,
+	OUT UINT64* Buffer
+);
+
+EFI_STATUS
+EFIAPI
+GuestFreePages(
+	IN UINT64	BasePage,
+	IN UINTN	Pages
+);
+
+EFI_STATUS
+EFIAPI
+GuestFreePool(
+	IN UINT64 Buffer
+);
+
 ///////////////////////////////////////////////
 ////			   Marshalling	  		   ////
 ///////////////////////////////////////////////

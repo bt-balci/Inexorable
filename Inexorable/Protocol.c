@@ -33,5 +33,5 @@ IxLocateProtocol(
 	IN VOID* Registration OPTIONAL,
 	OUT VOID** Interface
 ) {
-	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_HANDLE_PROTOCOL, (UINT64)Protocol, (UINT64)Registration, (UINT64)Interface, 0, 0, 0);;
+	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_LOCATE_PROTOCOL, (UINT64)Protocol, (UINT64)Registration, (UINT64)Interface, 0, 0, 0);
 }

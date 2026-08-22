@@ -20,6 +20,8 @@
 
 #define HOST_RESERVED_HEAP_SIZE		SIZE_4MB
 
+#define GUEST_ADDRESS_SPACE_SIZE	SIZE_1GB
+
 ///////////////////////////////////////////////
 ////				VMCALLs 			   ////
 ///////////////////////////////////////////////
@@ -85,13 +87,25 @@ typedef struct {
 
 typedef struct {
 	struct {
-		__attribute__((aligned(4096))) X86_IDT_ENTRY	Idt[256];
-		__attribute__((aligned(4096))) X86_GDT_ENTRY	Gdt[8192];
-		__attribute__((aligned(4096))) UINT8			Tss[104];
+		//
+		// Host descriptor tables — used when VM exits back to host.
+		//
+		__attribute__((aligned(4096))) X86_IDT_ENTRY	HostIdt[256];
+		__attribute__((aligned(4096))) X86_GDT_ENTRY	HostGdt[8192];
+		__attribute__((aligned(4096))) UINT8			HostTss[104];
 
-		VOID* IdtBase;
-		VOID* GdtBase;
-		VOID* TssBase;
+		VOID* HostIdtBase;
+		VOID* HostGdtBase;
+		VOID* HostTssBase;
+
+		//
+		// Guest descriptor table GPAs — allocated inside guest memory.
+		//
+		VOID* GuestGdtBase;
+		UINT16 GuestGdtLimit;
+		VOID* GuestIdtBase;
+		UINT16 GuestIdtLimit;
+		VOID* GuestTssBase;
 
 		UINT16 TrSelector;
 		UINT16 TrAccessRights;
@@ -99,7 +113,17 @@ typedef struct {
 	} SharedState;
 
 	struct {
-		__attribute__((aligned(4096))) CR3              IdentityCr3;
+		//
+		// Host identity-map page tables (1:1 map of first 512 GB).
+		//
+		__attribute__((aligned(4096))) CR3              HostCr3;
+		__attribute__((aligned(4096))) PML4				IdentityPml4[512];
+		__attribute__((aligned(4096))) PDPE_LARGE       IdentityPdpe[512];
+
+		//
+		// Guest CR3 points to guest PML4 allocated in guest memory.
+		//
+		UINT64 GuestCr3;
 
 		//
 		// Clang says its better padding this way.
@@ -107,9 +131,6 @@ typedef struct {
 		UINT32 EpdptCount;
 		UINT32 EpdeCount;
 		UINT32 EpteCount;
-
-		__attribute__((aligned(4096))) PML4				IdentityPml4[512];
-		__attribute__((aligned(4096))) PDPE_LARGE       IdentityPdpe[512];
 
 		__attribute__((aligned(4096))) EPTP				Eptp;
 		__attribute__((aligned(4096))) EPT_PML4			Epml4[512];
@@ -120,7 +141,7 @@ typedef struct {
 
 	struct {
 		BOOLEAN ExitedBootServices;
-		__attribute__((aligned(16))) UINT8 GuestInitialStack[BSP_INITIAL_STACK_SIZE];
+		UINT64 ApHaltSection;
 		struct {
 			//
 			// Do we really need this guy?

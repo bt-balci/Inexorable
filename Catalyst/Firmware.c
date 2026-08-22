@@ -482,37 +482,45 @@ EFIAPI
 FirmwareExitBootServices(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 ) {
+	DebugPrint0402("ExitBootServices: MapKey guest=0x%p host=0x%p, Exited=%d\n",
+		Cpu->Context.Rdx, g_VmState.Firmware.Memory.MapKey, g_VmState.Firmware.ExitedBootServices);
+
 	if (g_VmState.Firmware.ExitedBootServices) {
+		DebugPrint0402("ExitBootServices: already exited, returning EFI_INVALID_PARAMETER\n");
 		Cpu->Context.Rax = EFI_INVALID_PARAMETER;
 		return;
 	}
 
 	if (g_VmState.Firmware.Memory.MapKey != Cpu->Context.Rdx) {
+		DebugPrint0402("ExitBootServices: map key mismatch, returning EFI_INVALID_PARAMETER\n");
 		Cpu->Context.Rax = EFI_INVALID_PARAMETER;
 		return;
 	}
 
 	g_VmState.Firmware.ExitedBootServices = TRUE;
 	Cpu->Context.Rax = EFI_SUCCESS;
+	DebugPrint0402("ExitBootServices: SUCCESS, boot services now exited\n");
 }
 
-STATIC
 EFI_STATUS
 EFIAPI
-FindFreePages(
+GuestFindFreePages(
 	IN EFI_ALLOCATE_TYPE	AllocationType,
 	IN UINTN				Pages,
-	IN OUT UINT64* OutPageBase
-)
-{
+	IN OUT UINT64*			OutPageBase
+){
 	UINT64 MaxAddrPage = 0;
 	UINT64 Start = 0;
+
+	DebugPrint0402("GuestFindFreePages: Type=%d, Pages=%d, HintIn=0x%p, TotalPages=%d, NextHint=%d\n",
+		AllocationType, Pages, *OutPageBase, g_VmState.Firmware.Memory.TotalPages, g_VmState.Firmware.Memory.NextFreeHint);
 
 	if (AllocationType == AllocateAddress) {
 		//
 		// Exact address requested; must be free.
+		// Input is a GPA — convert to page index.
 		//
-		Start = *OutPageBase;
+		Start = *OutPageBase >> EFI_PAGE_SHIFT;
 		for (UINT64 j = Start; j < Start + Pages; j++) {
 			UINT64 Byte = j / 8;
 			UINT8  Bit = j % 8;
@@ -526,7 +534,7 @@ FindFreePages(
 			UINT8  Bit = j % 8;
 			g_VmState.Firmware.Memory.MemoryBitmap[Byte] |= (1 << Bit);
 		}
-		*OutPageBase = Start;
+		*OutPageBase = Start << EFI_PAGE_SHIFT;
 		return EFI_SUCCESS;
 	}
 	else if (AllocationType == AllocateMaxAddress) {
@@ -583,8 +591,10 @@ FindFreePages(
 					g_VmState.Firmware.Memory.MemoryBitmap[Byte] |= (1 << Bit);
 				}
 				g_VmState.Firmware.Memory.NextFreeHint = Base + Pages;
-				*OutPageBase = Base;
-				return EFI_SUCCESS;
+	*OutPageBase = Base << EFI_PAGE_SHIFT;
+	DebugPrint0402("GuestFindFreePages: SUCCESS base=0x%p (GPA), NextHint=%d\n",
+		*OutPageBase, g_VmState.Firmware.Memory.NextFreeHint);
+	return EFI_SUCCESS;
 			}
 		}
 		else {
@@ -599,20 +609,20 @@ FindFreePages(
 			break;
 		}
 	}
+	DebugPrint0402("GuestFindFreePages: FAILED — OUT_OF_RESOURCES (wanted %d pages, max=%d)\n", Pages, MaxAddrPage);
 	return EFI_OUT_OF_RESOURCES;
 }
 
-STATIC
 EFI_STATUS
 EFIAPI
-AllocatePool(
+GuestAllocatePool(
 	IN UINTN	Size,
 	OUT UINT64* Buffer
 ) {
 	UINTN RealSize = Size + sizeof(POOL_HEADER);
 	UINT64 Base = 0;
 	UINTN Pages = EFI_SIZE_TO_PAGES(RealSize);
-	EFI_STATUS Status = FindFreePages(AllocateAnyPages, Pages, &Base);
+	EFI_STATUS Status = GuestFindFreePages(AllocateAnyPages, Pages, &Base);
 	if (EFI_ERROR(Status)) return Status;
 
 	POOL_HEADER* Header;
@@ -634,34 +644,33 @@ AllocatePool(
 	Header->Pages = Pages;
 	Header->Size = Size;
 
-	*Buffer = (UINT64)(Base << EFI_PAGE_SHIFT) + sizeof(POOL_HEADER);
+	*Buffer = Base + sizeof(POOL_HEADER);
 	return EFI_SUCCESS;
 }
 
-STATIC
 EFI_STATUS
 EFIAPI
-FreePages(
+GuestFreePages(
 	IN UINT64	BasePage,
 	IN UINTN	Pages
 ) {
-	for (UINT64 i = BasePage; i < BasePage + Pages; i++) {
+	UINT64 StartIdx = BasePage >> EFI_PAGE_SHIFT;
+	for (UINT64 i = StartIdx; i < StartIdx + Pages; i++) {
 		UINT64 Byte = i / 8;
 		UINT8 Bit = i % 8;
 		g_VmState.Firmware.Memory.MemoryBitmap[Byte] &= ~(1 << Bit);
 	}
-	if (BasePage < g_VmState.Firmware.Memory.NextFreeHint) g_VmState.Firmware.Memory.NextFreeHint = BasePage;
+	if (StartIdx < g_VmState.Firmware.Memory.NextFreeHint) g_VmState.Firmware.Memory.NextFreeHint = StartIdx;
 	return EFI_SUCCESS;
 }
 
-STATIC
 EFI_STATUS
 EFIAPI
-FreePool(
+GuestFreePool(
 	IN UINT64 Buffer
 ) {
 	POOL_HEADER* Header = (POOL_HEADER*)(Buffer - sizeof(POOL_HEADER));
-	if (!TranslateGuestPhysicalToHostPhysical((Buffer) << EFI_PAGE_SHIFT, (VOID**)&Header)) {
+	if (!TranslateGuestPhysicalToHostPhysical(Buffer, (VOID**)&Header)) {
 		//
 		// Must not fail.
 		//
@@ -675,7 +684,7 @@ FreePool(
 		return EFI_INVALID_PARAMETER;
 	}
 
-	return FreePages(((UINT64)Header) >> 12, Header->Pages);
+	return GuestFreePages(Buffer - sizeof(POOL_HEADER), Header->Pages);
 }
 
 
@@ -695,10 +704,15 @@ FirmwareAllocatePages(
 	UINTN Pages = Cpu->Context.R8;
 	UINT64 OutPtr = 0;
 
+	DebugPrint0402("AllocatePages: Type=%d, Pages=%d, OutPtr=0x%p\n", AllocationType, Pages, Cpu->Context.R9);
+
 	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)OutPtr, Cpu->Context.R9, sizeof(OutPtr))) goto EndPageFault;
 
 	UINT64 Allocated = 0;
-	Cpu->Context.Rax = FindFreePages(AllocationType, Pages, (UINT64*)&Allocated);
+	Cpu->Context.Rax = GuestFindFreePages(AllocationType, Pages, (UINT64*)&Allocated);
+
+	DebugPrint0402("AllocatePages: result=%r, allocated GPA=0x%p (page %d)\n",
+	Cpu->Context.Rax, Allocated, Allocated >> EFI_PAGE_SHIFT);
 
 	if (EFI_ERROR(Cpu->Context.Rax)) return;
 
@@ -724,7 +738,7 @@ FirmwareFreePages(
 	EFI_PHYSICAL_ADDRESS Address = Cpu->Context.Rcx;
 	UINTN Pages = Cpu->Context.Rdx;
 
-	Cpu->Context.Rax = FreePages((UINT64)Address, Pages);
+	Cpu->Context.Rax = GuestFreePages((UINT64)Address, Pages);
 }
 
 VOID
@@ -740,7 +754,7 @@ FirmwareAllocatePool(
 	UINT64 OutPtr = Cpu->Context.R8;
 
 	UINT64 Pages = 0;
-	Cpu->Context.Rax = AllocatePool(Size, &Pages);
+	Cpu->Context.Rax = GuestAllocatePool(Size, &Pages);
 
 	if (EFI_ERROR(Cpu->Context.Rax)) return;
 
@@ -765,7 +779,7 @@ FirmwareFreePool(
 
 	UINT64 Buffer = Cpu->Context.Rcx;
 
-	Cpu->Context.Rax = FreePool(Buffer);
+	Cpu->Context.Rax = GuestFreePool(Buffer);
 }
 
 VOID
@@ -774,6 +788,7 @@ FirmwareGetMemoryMap(
 	IN OUT CATALYST_VIRTUAL_CPU* Cpu
 ) {
 	if (g_VmState.Firmware.ExitedBootServices) {
+		DebugPrint0402("GetMemoryMap: boot services already exited, skipping\n");
 		return;
 	}
 
@@ -781,6 +796,9 @@ FirmwareGetMemoryMap(
 	// Simulate an actual map key.
 	//
 	g_VmState.Firmware.Memory.MapKey++;
+
+	DebugPrint0402("GetMemoryMap: MapKey=%d, TotalPages=%d\n",
+		g_VmState.Firmware.Memory.MapKey, g_VmState.Firmware.Memory.TotalPages);
 
 	UINT64 MemoryMapSizePtr = Cpu->Context.Rcx;
 	UINTN MemoryMapSize = 0;
@@ -852,7 +870,10 @@ End:
 
 	Cpu->Context.Rax = EFI_SUCCESS;
 
-	return;
+DebugPrint0402("GetMemoryMap: SUCCESS, MapKey=%d, MemoryMapSize=%d, DescriptorSize=%d\n",
+	MapKey, MemoryMapSize, DescriptorSize);
+
+return;
 
 EndPageFault:
 	{
@@ -912,7 +933,7 @@ GenerateProtocolCallStub(
 	//
 	// 17 = size of shellcode.
 	//
-	EFI_STATUS Status = AllocatePool(17, &GuestMem);
+	EFI_STATUS Status = GuestAllocatePool(17, &GuestMem);
 	if (EFI_ERROR(Status)) {
 		DebugPrint0402("Failed to allocate 17 bytes in guest memory: %r\n", Status);
 		return 0;
@@ -932,7 +953,7 @@ GenerateProtocolCallStub(
 	//
 	if (!TranslateGuestAddressToHostAddress(GuestCr3, GuestMem, (VOID**)&StubPtr)) {
 		DebugPrint0402("Could not translate guest to host address for GPA=0x%llx\n", GuestMem);
-		FreePool(GuestMem);
+		GuestFreePool(GuestMem);
 		return 0;
 	}
 
@@ -945,7 +966,7 @@ GenerateProtocolCallStub(
 	Status = gBS->AllocatePool(EfiRuntimeServicesData, sizeof(PROTOCOL_STUB_CONTEXT), (VOID**)&CallData);
 	if (EFI_ERROR(Status)) {
 		DebugPrint0402("Failed to allocate host context: %r\n", Status);
-		FreePool(GuestMem);
+		GuestFreePool(GuestMem);
 		return 0;
 	}
 
@@ -1008,7 +1029,7 @@ ReplicateProtocol(
 	// Allocate pool to hold guest protocol replica.
 	// Lifetime-managementmaxxing. Freed when protocol is closed.
 	//
-	EFI_STATUS Status = AllocatePool(Info->Size, GuestInterface);
+	EFI_STATUS Status = GuestAllocatePool(Info->Size, GuestInterface);
 	if (EFI_ERROR(Status)) {
 		DebugPrint0402("Failed to allocate guest pool for replica: %r\n", Status);
 		return Status;

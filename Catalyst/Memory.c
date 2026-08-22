@@ -164,19 +164,22 @@ TranslateGuestPhysicalToHostPhysical(
 	UINT16 Offset   = (GuestPhysicalAddress) & 0xFFF;
 
 	EPT_PML4* Epml4 = &g_VmState.AddressSpace.Epml4[Pml4Idx];
-	//DebugPrint0402("Epml4 = 0x%x at 0x%p\n", Epml4->All, Epml4);
-	if (!Epml4->Present)
-		return FALSE;
+if (!Epml4->Present) {
+	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PML4[%d] — not present\n", GuestPhysicalAddress, Pml4Idx);
+	return FALSE;
+}
 
-	EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
-	//DebugPrint0402("Pdpt = 0x%x at 0x%p\n", Pdpt->All, Pdpt);
-	if (!Pdpt->Present)
-		return FALSE;
+EPT_PDPTE* Pdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
+if (!Pdpt->Present) {
+	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PDPTE[%d] — not present\n", GuestPhysicalAddress, PdptIdx);
+	return FALSE;
+}
 
-	EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
-	//DebugPrint0402("Pd = 0x%x at 0x%p\n", Pd->All, Pd);
-	if (!Pd->Present)
-		return FALSE;
+EPT_PDE* Pd = &(((EPT_PDE*)(Pdpt->PhysicalAddress << 12))[PdIdx]);
+if (!Pd->Present) {
+	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PDE[%d] — not present\n", GuestPhysicalAddress, PdIdx);
+	return FALSE;
+}
 
 	/*
 	if (Pd->Large)
@@ -184,9 +187,10 @@ TranslateGuestPhysicalToHostPhysical(
 	*/
 
 	EPT_PTE* Pt = &(((EPT_PTE*)(((EPT_PDE*)Pd)->PhysicalAddress << 12))[PtIdx]);
-	//DebugPrint0402("Pt = 0x%x at 0x%p\n", Pt->All, Pt);
-	if (!Pt->Present)
-		return FALSE;
+if (!Pt->Present) {
+	DebugPrint0402("TranslateGPA->HPA: GPA=0x%p FAIL at PTE[%d] — not present\n", GuestPhysicalAddress, PtIdx);
+	return FALSE;
+}
 
 	UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12) + Offset;
 

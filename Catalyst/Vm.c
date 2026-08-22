@@ -181,9 +181,9 @@ VmExitHandler(
 	//
 	ExitReason &= 0xFFFF;
 
-	DebugPrint0402("VMEXIT[%d]: Reason = %d, Qualification = 0x%p, ExitInstructionLen = %d, GuestRip = 0x%p, GuestRsp = 0x%p\n",
-		Cpu->Index, ExitReason, ExitQualification, ExitInstructionLen,
-		Cpu->Context.Rip, Cpu->Context.Rsp);
+	DebugPrint0402("VMEXIT[%d]: Reason = %d (0x%x), Qualification = 0x%p, ExitInstructionLen = %d, GuestRip = 0x%p, GuestRsp = 0x%p, GuestCr3 = 0x%p\n",
+		Cpu->Index, ExitReason, ExitReason, ExitQualification, ExitInstructionLen,
+		Cpu->Context.Rip, Cpu->Context.Rsp, Cpu->ExtendedContext.Cr3.All);
 
 	BOOLEAN Borked = FALSE;
 
@@ -244,9 +244,9 @@ VmExitHandler(
 	}
 
 	case VMEXIT_REASON_VMCALL:
-		DebugPrint0402("Guest made a hypervisor call. Function = 0x%p, Arg1 = 0x%p, "
-			"Arg2 = 0x%p, Arg3 = 0x%p, Arg4 = 0x%p, Arg5 = 0x%p, Arg6 = 0x%p\n",
-			Cpu->Context.Rax, Cpu->Context.Rcx, Cpu->Context.Rdx,
+		DebugPrint0402("VMCALL[%d]: Fn=0x%x RCX=0x%p RDX=0x%p R8=0x%p R9=0x%p R10=0x%p R11=0x%p\n",
+			Cpu->Index,
+			(UINT32)Cpu->Context.Rax, Cpu->Context.Rcx, Cpu->Context.Rdx,
 			Cpu->Context.R8, Cpu->Context.R9, Cpu->Context.R10, Cpu->Context.R11);
 
 		//
@@ -254,69 +254,88 @@ VmExitHandler(
 		//
 		switch (Cpu->Context.Rax) {
 		case CATALYST_VMCALL_GET_VARIABLE:
+			DebugPrint0402("  VMCALL -> GetVariable\n");
 			FirmwareGetVariable(Cpu);
 			break;
 		case CATALYST_VMCALL_SET_VARIABLE:
+			DebugPrint0402("  VMCALL -> SetVariable\n");
 			FirmwareSetVariable(Cpu);
 			break;
 		case CATALYST_VMCALL_GET_NEXT_VARIABLE_NAME:
+			DebugPrint0402("  VMCALL -> GetNextVariableName\n");
 			FirmwareGetNextVariableName(Cpu);
 			break;
 		case CATALYST_VMCALL_QUERY_VARIABLE_INFO:
+			DebugPrint0402("  VMCALL -> QueryVariableInfo\n");
 			FirmwareQueryVariableInfo(Cpu);
 			break;
 		case CATALYST_VMCALL_GET_TIME:
+			DebugPrint0402("  VMCALL -> GetTime\n");
 			FirmwareGetTime(Cpu);
 			break;
 		case CATALYST_VMCALL_SET_TIME:
+			DebugPrint0402("  VMCALL -> SetTime\n");
 			FirmwareSetTime(Cpu);
 			break;
 		case CATALYST_VMCALL_GET_WAKEUP_TIME:
+			DebugPrint0402("  VMCALL -> GetWakeupTime\n");
 			FirmwareGetWakeupTime(Cpu);
 			break;
 		case CATALYST_VMCALL_SET_WAKEUP_TIME:
+			DebugPrint0402("  VMCALL -> SetWakeupTime\n");
 			FirmwareSetWakeupTime(Cpu);
 			break;
 		case CATALYST_VMCALL_GET_NEXT_HIGH_MONO_COUNT:
+			DebugPrint0402("  VMCALL -> GetNextHighMonotonicCount\n");
 			FirmwareGetNextHighMonotonicCount(Cpu);
 			break;
 		case CATALYST_VMCALL_RESET_SYSTEM:
-			//
-			// Lol
-			//
+			DebugPrint0402("  VMCALL -> ResetSystem — HALTING\n");
 			__asm__ __volatile__("hlt");
 			break;
 
 		case CATALYST_VMCALL_EXIT_BOOT_SERVICES:
+			DebugPrint0402("  VMCALL -> ExitBootServices\n");
 			FirmwareExitBootServices(Cpu);
 			break;
 		case CATALYST_VMCALL_FREE_POOL:
+			DebugPrint0402("  VMCALL -> FreePool\n");
 			FirmwareFreePool(Cpu);
 			break;
 		case CATALYST_VMCALL_FREE_PAGES:
+			DebugPrint0402("  VMCALL -> FreePages\n");
 			FirmwareFreePages(Cpu);
 			break;
 		case CATALYST_VMCALL_ALLOCATE_POOL:
+			DebugPrint0402("  VMCALL -> AllocatePool\n");
 			FirmwareAllocatePool(Cpu);
 			break;
 		case CATALYST_VMCALL_ALLOCATE_PAGES:
+			DebugPrint0402("  VMCALL -> AllocatePages\n");
 			FirmwareAllocatePages(Cpu);
 			break;
 		case CATALYST_VMCALL_GET_MEMORY_MAP:
+			DebugPrint0402("  VMCALL -> GetMemoryMap\n");
 			FirmwareGetMemoryMap(Cpu);
 			break;
 		case CATALYST_VMCALL_HANDLE_PROTOCOL:
+			DebugPrint0402("  VMCALL -> HandleProtocol\n");
 			FirmwareHandleProtocol(Cpu);
 			break;
 		case CATALYST_VMCALL_LOCATE_PROTOCOL:
+			DebugPrint0402("  VMCALL -> LocateProtocol\n");
 			FirmwareLocateProtocol(Cpu);
 			break;
 		case CATALYST_VMCALL_EXECUTE_PROTOCOL:
+			DebugPrint0402("  VMCALL -> ExecuteProtocol\n");
 			FirmwareExecuteProtocol(Cpu);
 			break;
 		default:
+			DebugPrint0402("  VMCALL -> UNKNOWN 0x%x, returning EFI_NOT_FOUND\n", (UINT32)Cpu->Context.Rax);
 			Cpu->Context.Rax = EFI_NOT_FOUND;
 		}
+
+		DebugPrint0402("VMCALL[%d] returned RAX=0x%p (%r)\n", Cpu->Index, Cpu->Context.Rax, Cpu->Context.Rax);
 
 		//
 		// Fall through to advance RIP
@@ -324,6 +343,8 @@ VmExitHandler(
 		break;
 
 	default:
+		DebugPrint0402("VMEXIT[%d]: UNKNOWN EXIT REASON %d (0x%x) — BORKED\n",
+			Cpu->Index, ExitReason, ExitReason);
 		//
 		// Unknown exit reason. Fatal.
 		//
@@ -332,6 +353,7 @@ VmExitHandler(
 	}
 
 	if (Borked) {
+		DebugPrint0402("VMEXIT[%d]: BORKED — dumping VMCS and halting\n", Cpu->Index);
 		DumpVmcs();
 		__asm__ __volatile__ ("hlt");
 	}
@@ -340,6 +362,8 @@ VmExitHandler(
 		// Advance the guest RIP.
 		//
 		__vmx_vmwrite(GUEST_RIP, Cpu->Context.Rip + ExitInstructionLen);
+		DebugPrint0402("VMEXIT[%d]: advancing RIP from 0x%p to 0x%p (+%d)\n",
+			Cpu->Index, Cpu->Context.Rip, Cpu->Context.Rip + ExitInstructionLen, ExitInstructionLen);
 	}
 }
 
@@ -425,6 +449,8 @@ SetupVmcs(
 	__vmx_vmwrite(EPTP_FULL, g_VmState.AddressSpace.Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
 	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT64);
+	DebugPrint0402("SetupVmcs[%d]: EPTP=0x%p, MsrBitmap=0x%p, ExceptionBitmap=0x%p\n",
+		Cpu->Index, g_VmState.AddressSpace.Eptp.All, (UINT64)&Cpu->Data.MsrBitmap, (UINT64)MAX_UINT64);
 
 	//
 	// Initialize host.
@@ -435,83 +461,86 @@ SetupVmcs(
 	__vmx_vmwrite(HOST_DS_SELECTOR, AsmReadDs());
 	__vmx_vmwrite(HOST_FS_SELECTOR, AsmReadFs());
 	__vmx_vmwrite(HOST_GS_SELECTOR, AsmReadGs());
-	__vmx_vmwrite(HOST_TR_SELECTOR, g_VmState.SharedState.TrSelector);
+	__vmx_vmwrite(HOST_TR_SELECTOR, AsmReadTr());
 
 	__vmx_vmwrite(HOST_CR0, __readcr0());
-	//
-	// Because for some reason, original identity page tables stay in EfiConventionalMemory. Which EPT mapping overwrites... Bruh
-	//
-	__vmx_vmwrite(HOST_CR3, g_VmState.AddressSpace.IdentityCr3.All);
+	__vmx_vmwrite(HOST_CR3, g_VmState.AddressSpace.HostCr3.All);
 	__vmx_vmwrite(HOST_CR4, __readcr4());
 
 	__vmx_vmwrite(HOST_FS_BASE, 0);
 	__vmx_vmwrite(HOST_GS_BASE, (UINT64)Cpu);
 
-	__vmx_vmwrite(HOST_TR_BASE, (UINT64)g_VmState.SharedState.TssBase);
-	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)g_VmState.SharedState.GdtBase);
-	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)g_VmState.SharedState.IdtBase);
+	__vmx_vmwrite(HOST_TR_BASE, GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)&g_VmState.SharedState.HostGdt[AsmReadTr() >> 3]));
+	__vmx_vmwrite(HOST_GDTR_BASE, (UINT64)g_VmState.SharedState.HostGdtBase);
+	__vmx_vmwrite(HOST_IDTR_BASE, (UINT64)g_VmState.SharedState.HostIdtBase);
 
 	__vmx_vmwrite(HOST_RIP, (UINT64)AsmVmExit);
 	__vmx_vmwrite(HOST_RSP, (UINT64)&Cpu->Data.HostStack);
 
 	//
 	// Initialize guest.
+	// Guest GDT layout: 0=null, 6=data(0x30), 7=code(0x38), 8=TSS(0x40)
 	//
-	__vmx_vmwrite(GUEST_ES_SELECTOR, AsmReadEs());
-	__vmx_vmwrite(GUEST_SS_SELECTOR, AsmReadSs());
-	__vmx_vmwrite(GUEST_DS_SELECTOR, AsmReadDs());
-	__vmx_vmwrite(GUEST_LDTR_SELECTOR, AsmReadLdtr());
+	__vmx_vmwrite(GUEST_ES_SELECTOR, 0x30);
+	__vmx_vmwrite(GUEST_SS_SELECTOR, 0x30);
+	__vmx_vmwrite(GUEST_DS_SELECTOR, 0x30);
+	__vmx_vmwrite(GUEST_LDTR_SELECTOR, 0);
 
 	__vmx_vmwrite(GUEST_TR_SELECTOR, g_VmState.SharedState.TrSelector);
-	__vmx_vmwrite(GUEST_FS_SELECTOR, AsmReadFs());
-	__vmx_vmwrite(GUEST_GS_SELECTOR, AsmReadGs());
-	__vmx_vmwrite(GUEST_CS_SELECTOR, AsmReadCs());
+	__vmx_vmwrite(GUEST_FS_SELECTOR, 0x30);
+	__vmx_vmwrite(GUEST_GS_SELECTOR, 0x30);
+	__vmx_vmwrite(GUEST_CS_SELECTOR, 0x38);
 
-	__vmx_vmwrite(GUEST_ES_LIMIT, AsmLoadSegmentLimit(AsmReadEs()));
-	__vmx_vmwrite(GUEST_SS_LIMIT, AsmLoadSegmentLimit(AsmReadSs()));
-	__vmx_vmwrite(GUEST_DS_LIMIT, AsmLoadSegmentLimit(AsmReadDs()));
-	__vmx_vmwrite(GUEST_CS_LIMIT, AsmLoadSegmentLimit(AsmReadCs()));
+	//
+	// Guest segment limits — flat 4 GB model (G=1, limit field = 0xFFFFF).
+	//
+	__vmx_vmwrite(GUEST_ES_LIMIT, 0xFFFFFFFF);
+	__vmx_vmwrite(GUEST_SS_LIMIT, 0xFFFFFFFF);
+	__vmx_vmwrite(GUEST_DS_LIMIT, 0xFFFFFFFF);
+	__vmx_vmwrite(GUEST_CS_LIMIT, 0xFFFFFFFF);
 
-	__vmx_vmwrite(GUEST_FS_LIMIT, AsmLoadSegmentLimit(AsmReadFs()));
-	__vmx_vmwrite(GUEST_GS_LIMIT, AsmLoadSegmentLimit(AsmReadGs()));
+	__vmx_vmwrite(GUEST_FS_LIMIT, 0xFFFFFFFF);
+	__vmx_vmwrite(GUEST_GS_LIMIT, 0xFFFFFFFF);
 	__vmx_vmwrite(GUEST_TR_LIMIT, g_VmState.SharedState.TrLimit);
 
-	__vmx_vmwrite(GUEST_ES_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadEs()));
-	__vmx_vmwrite(GUEST_CS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadCs()));
-	__vmx_vmwrite(GUEST_SS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadSs()));
-	__vmx_vmwrite(GUEST_DS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadDs()));
-	__vmx_vmwrite(GUEST_FS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadFs()));
-	__vmx_vmwrite(GUEST_GS_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(AsmReadGs()));
+	//
+	// Guest segment access rights.
+	// 0xC092 = present, DPL0, data read/write, 32-bit, G=1
+	// 0xA09A = present, DPL0, code execute/read, long mode, G=1
+	//
+	__vmx_vmwrite(GUEST_ES_ACCESS_RIGHTS, 0xC093);
+	__vmx_vmwrite(GUEST_CS_ACCESS_RIGHTS, 0xA09B);
+	__vmx_vmwrite(GUEST_SS_ACCESS_RIGHTS, 0xC093);
+	__vmx_vmwrite(GUEST_DS_ACCESS_RIGHTS, 0xC093);
+	__vmx_vmwrite(GUEST_FS_ACCESS_RIGHTS, 0xC093);
+	__vmx_vmwrite(GUEST_GS_ACCESS_RIGHTS, 0xC093);
 	__vmx_vmwrite(GUEST_TR_ACCESS_RIGHTS, g_VmState.SharedState.TrAccessRights);
-	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, AsmLoadSegmentAccessRights(0));
+	__vmx_vmwrite(GUEST_LDTR_ACCESS_RIGHTS, 0x10000);   // Unusable
 
-	__vmx_vmwrite(GUEST_FS_BASE, (UINT64)Cpu);
+	__vmx_vmwrite(GUEST_FS_BASE, 0);
 	__vmx_vmwrite(GUEST_GS_BASE, 0);
 
-	IA32_DESCRIPTOR Descriptor = { 0 };
-	AsmReadIdtr(&Descriptor);
+	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)g_VmState.SharedState.GuestIdtBase);
+	__vmx_vmwrite(GUEST_IDTR_LIMIT, g_VmState.SharedState.GuestIdtLimit);
 
-	__vmx_vmwrite(GUEST_IDTR_BASE, (UINT64)g_VmState.SharedState.IdtBase);
-	__vmx_vmwrite(GUEST_IDTR_LIMIT, Descriptor.Limit);
+	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)g_VmState.SharedState.GuestGdtBase);
+	__vmx_vmwrite(GUEST_GDTR_LIMIT, g_VmState.SharedState.GuestGdtLimit);
 
-	AsmReadGdtr(&Descriptor);
-
-	__vmx_vmwrite(GUEST_GDTR_BASE, (UINT64)g_VmState.SharedState.Gdt);
-	__vmx_vmwrite(GUEST_GDTR_LIMIT, Descriptor.Limit);
-
-	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)g_VmState.SharedState.GdtBase);
+	__vmx_vmwrite(GUEST_TR_BASE, (UINT64)g_VmState.SharedState.GuestTssBase);
 
 	//
-	// Intel's propaganda to force everyone to use sysenter again.
+	// SYSENTER_CS must not be 0 when IA-32e mode guest is active (SDM 26.3.1.5).
+	// Use our guest code selector.  The guest won't use SYSENTER (UEFI is
+	// long-mode SYSCALL), so EIP/ESP = 0 is harmless.
 	//
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS, __readmsr(IA32_SYSENTER_CS));
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP, __readmsr(IA32_SYSENTER_EIP));
-	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP, __readmsr(IA32_SYSENTER_ESP));
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS, 0x38);
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP, 0);
+	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP, 0);
 
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, MAX_UINT64);
 
 	__vmx_vmwrite(GUEST_CR0, __readcr0());
-	__vmx_vmwrite(GUEST_CR3, g_VmState.AddressSpace.IdentityCr3.All);
+	__vmx_vmwrite(GUEST_CR3, g_VmState.AddressSpace.GuestCr3);
 	__vmx_vmwrite(GUEST_CR4, __readcr4());
 
 	__vmx_vmwrite(GUEST_RFLAGS, AsmReadEflags());
@@ -634,3 +663,4 @@ PrepareProcessor(
 	//
 	SetupVmcs();
 }
+

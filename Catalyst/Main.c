@@ -13,6 +13,7 @@
 #include "x86.h"
 #include "Vm.h"
 #include "Memory.h"
+#include "Firmware.h"
 
 GUID gEfiRngProtocolGuid = EFI_RNG_PROTOCOL_GUID;
 GUID gEfiLoadFile2ProtocolGuid = EFI_LOAD_FILE2_PROTOCOL_GUID;
@@ -26,8 +27,6 @@ CONST UINT8 g_InexorableEfi[] = {
 CONST UINTN g_InexorableEfiSize = sizeof(g_InexorableEfi);
 
 UINT64 g_CurrentGuestPhysicalAddress = 0;
-
-CONST UINT8 g_ApHalt[] = { 0xF4 };
 
 CATALYST_VIRTUAL_CPU g_VirtualProcessors[CONFIG_CPU_COUNT] = {0};
 
@@ -48,7 +47,7 @@ PrepareProcessors(
 	//
 	//	EFI_MP_SERVICES is used to wakeup APs.
 	//
-	ASSERT(Status == EFI_SUCCESS);
+	ASSERT_EFI_ERROR(Status);
 
 	UINTN TotalProcessors = 0;
 	UINTN EnabledProcessors = 0;
@@ -57,7 +56,7 @@ PrepareProcessors(
 	//
 	// This should not fail.
 	//
-	ASSERT(Status == EFI_SUCCESS);
+	ASSERT_EFI_ERROR(Status);
 
 	//
 	// The number of CPUs is statistically allocated.
@@ -66,60 +65,26 @@ PrepareProcessors(
 
 	DebugPrint0402("Total of %d processors, %d enabled\n", TotalProcessors, EnabledProcessors);
 
-	//
-	// The guest OS will wake up APs. They must "sleep".
-	//
 	{
 		CATALYST_VIRTUAL_CPU* Cpu = &g_VirtualProcessors[0];
+
+		UINT64 StackGpa;
+		Status = GuestFindFreePages(AllocateAnyPages, EFI_SIZE_TO_PAGES(BSP_INITIAL_STACK_SIZE), &StackGpa);
+		ASSERT_EFI_ERROR(Status);
+
+		Cpu->Context.Rsp = StackGpa + BSP_INITIAL_STACK_SIZE;
 		Cpu->Context.Rip = (UINT64)GuestRip;
-		Cpu->Context.Rsp = (UINT64)&g_VmState.Firmware.GuestInitialStack;
 
-		for (UINT32 i = 0; i < EFI_SIZE_TO_PAGES(BSP_INITIAL_STACK_SIZE); i++) {
-			//
-			// They can be same variable but ok.
-			//
-			UINT64 Host = Cpu->Context.Rsp + (i * 0x1000);
-			UINT64 Guest = Cpu->Context.Rsp + (i * 0x1000);
-
-			DebugPrint0402("Mapping initial BSP stack. GPA = 0x%p, HPA = 0x%p\n", Host, Guest);
-
-			if (!MapSinglePage(Guest, Host, FALSE)) {
-				DebugPrint0402("Failed to map BSP initial stack!\n");
-				return EFI_NO_MAPPING;
-			}
-		}
-
-		//Cpu->Context.Rsp = GUEST_INITIAL_RSP;
+		DebugPrint0402("BSP stack allocated at GPA 0x%p - 0x%p\n", StackGpa, Cpu->Context.Rsp - 1);
 	}
+
 
 	//
 	// Initialize globals for each guest CPU.
 	// Because for APs started via EFI_MP_SERVICES_PROTOCOL, the TR and other segment values are invalid for VMX.
 	//
 	IA32_DESCRIPTOR Descriptor = { 0 };
-	AsmReadGdtr(&Descriptor);
-
-	//
-	// 1:1 map descriptor structures. Read the disclaimer at Main.c for the other screw up.
-	// Warning: This will INEVITABLY BREAK if the Catalyst is not mapped over the 4GB limit and guest has more than 4GB memory. 
-	//
-	g_VmState.SharedState.GdtBase = (VOID*)Descriptor.Base;
-	DebugPrint0402("Mapping GdtBase. GPA = 0x%p, HPA = 0x%p\n", g_VmState.SharedState.GdtBase, g_VmState.SharedState.GdtBase);
-	MapSinglePage((UINT64)g_VmState.SharedState.GdtBase, (UINT64)g_VmState.SharedState.GdtBase, FALSE);
-
-	g_VmState.SharedState.TssBase = (VOID*)GET_GDT_TSS_BASE((X86_GDT_SYSTEM_ENTRY*)AsmLoadSegmentDescriptor(Descriptor.Base, AsmReadTr()));
-	DebugPrint0402("Mapping TssBase. GPA = 0x%p, HPA = 0x%p\n", g_VmState.SharedState.TssBase, g_VmState.SharedState.TssBase);
-	MapSinglePage((UINT64)g_VmState.SharedState.TssBase, (UINT64)g_VmState.SharedState.TssBase, FALSE);
-
 	AsmReadIdtr(&Descriptor);
-
-	g_VmState.SharedState.IdtBase = (VOID*)Descriptor.Base;
-	DebugPrint0402("Mapping IdtBase. GPA = 0x%p, HPA = 0x%p\n", g_VmState.SharedState.IdtBase, g_VmState.SharedState.IdtBase);
-	MapSinglePage((UINT64)g_VmState.SharedState.IdtBase, (UINT64)g_VmState.SharedState.IdtBase, FALSE);
-
-	g_VmState.SharedState.TrSelector		= AsmReadTr();
-	g_VmState.SharedState.TrAccessRights	= AsmLoadSegmentAccessRights(g_VmState.SharedState.TrSelector);
-	g_VmState.SharedState.TrLimit			= AsmLoadSegmentLimit(g_VmState.SharedState.TrSelector);
 
 	//
 	// Set the interrupt handler for sexy APIC shenanigans.
@@ -136,7 +101,7 @@ PrepareProcessors(
 		//
 		// They should halt and wait for mommy SIPI from guest OS like a good little boy.
 		//
-		Cpu->Context.Rip = (UINT64)&g_ApHalt;
+		Cpu->Context.Rip = g_VmState.Firmware.ApHaltSection;
 		
 		//
 		// Set it. Forget it. APs won't use the stack anyway.
@@ -300,38 +265,6 @@ EFIAPI
 MapMemory(
 	VOID
 ) {
-	UINTN	MapSize				= 0;
-	UINTN	MapKey				= 0;
-	UINT32	DescriptorVersion	= 0;
-	UINTN	DescriptorSize		= 0;
-
-	EFI_STATUS Status = gBS->GetMemoryMap(&MapSize, NULL, &MapKey, &DescriptorSize, &DescriptorVersion);
-	if (Status != EFI_BUFFER_TOO_SMALL) {
-		DebugPrint0402("Failed to get memory map size: %r\n", Status);
-		return Status;
-	}
-
-	//
-	// +10 to make sure
-	//
-	MapSize += DescriptorSize * 10;
-	EFI_MEMORY_DESCRIPTOR* DescriptorArray = 0;
-
-	Status = gBS->AllocatePool(EfiBootServicesData, MapSize, (VOID**)&DescriptorArray);
-	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to allocate for memory map: %r\n", Status);
-		return Status;
-	}
-
-	Status = gBS->GetMemoryMap(&MapSize, DescriptorArray, &MapKey, &DescriptorSize, &DescriptorVersion);
-	if (EFI_ERROR(Status)) {
-		DebugPrint0402("Failed to get memory map: %r\n", Status);
-		goto End;
-	}
-
-	UINTN NumEntries = MapSize / DescriptorSize;
-	EFI_MEMORY_DESCRIPTOR* Desc = DescriptorArray;
-
 	//
 	// Initialize globals.
 	//
@@ -342,7 +275,7 @@ MapMemory(
 
 	DebugPrint0402("g_Eptp = 0x%p\n", g_VmState.AddressSpace.Eptp.All);
 
-	g_VmState.AddressSpace.IdentityCr3.PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.IdentityPml4[0]) >> 12;
+	g_VmState.AddressSpace.HostCr3.PhysicalAddress = ((UINT64)&g_VmState.AddressSpace.IdentityPml4[0]) >> 12;
 
 	g_VmState.AddressSpace.IdentityPml4[0].Present = TRUE;
 	g_VmState.AddressSpace.IdentityPml4[0].Write = TRUE;
@@ -362,110 +295,203 @@ MapMemory(
 		g_VmState.AddressSpace.IdentityPdpe[i].PhysicalAddress = i;
 	}
 
-	DebugPrint0402("g_IdentityCr3 = 0x%p\n", g_VmState.AddressSpace.IdentityCr3.All);
+	DebugPrint0402("HostCr3 = 0x%p\n", g_VmState.AddressSpace.HostCr3.All);
+
+	//
+	// Copy current host GDT / IDT into SharedState so the host has valid
+	// descriptor tables when a VM exit occurs.
+	//
+	{
+		IA32_DESCRIPTOR HostGdtr;
+		AsmReadGdtr(&HostGdtr);
+		CopyMem(g_VmState.SharedState.HostGdt, (VOID*)HostGdtr.Base, HostGdtr.Limit + 1);
+		g_VmState.SharedState.HostGdtBase = g_VmState.SharedState.HostGdt;
+	}
+	{
+		IA32_DESCRIPTOR HostIdtr;
+		AsmReadIdtr(&HostIdtr);
+		CopyMem(g_VmState.SharedState.HostIdt, (VOID*)HostIdtr.Base, HostIdtr.Limit + 1);
+		g_VmState.SharedState.HostIdtBase = g_VmState.SharedState.HostIdt;
+	}
+	g_VmState.SharedState.HostTssBase = g_VmState.SharedState.HostTss;
 
 	DebugPrint0402("Mapping out free memory...\n");
 
-	UINT64 TotalBytes = 0;
-	BOOLEAN HostReserved = FALSE;
+	UINTN Pages = EFI_SIZE_TO_PAGES(GUEST_ADDRESS_SPACE_SIZE);
+	EFI_PHYSICAL_ADDRESS GuestAddressSpaceBeginning = 0;
 
 	//
-	// We will map everything from 0. As if there is contiguous, linear memory for the guest.
+	// Just allocate from boot services....
 	//
-	for (UINTN i = 0; i < NumEntries; i++) {
-		//
-		// Exclude everything except EfiConventionalMemory. We don't want to bork ourselves.
-		//
-		if (Desc->Type == EfiConventionalMemory /*||
-			Desc->Type == EfiBootServicesCode ||
-			Desc->Type == EfiBootServicesData ||
-			Desc->Type == EfiLoaderCode ||
-			Desc->Type == EfiLoaderData*/)
-		{
-			UINT64 PhysicalStart = Desc->PhysicalStart;
-			UINT64 NumberOfPages = Desc->NumberOfPages;
-			
-			//
-			// We are mapping EfiConventionalMemory. Which means free memory. Whenever we do AllocatePool or AllocatePages on host's side, we are stealing memory from guest.
-			// So we gotta reserve for host.
-			//
-			if (!HostReserved) {
-				if (EFI_PAGES_TO_SIZE(NumberOfPages) > HOST_RESERVED_HEAP_SIZE) {
-
-					DebugPrint0402("Reserved host heap starting from 0x%p for %d pages\n", PhysicalStart, EFI_SIZE_TO_PAGES(HOST_RESERVED_HEAP_SIZE));
-
-					//
-					// Reserve 4 MBs
-					//
-					PhysicalStart += HOST_RESERVED_HEAP_SIZE;
-					NumberOfPages -= EFI_SIZE_TO_PAGES(HOST_RESERVED_HEAP_SIZE);
-					HostReserved = TRUE;
-				}
-			}
-
-			DebugPrint0402("Found memory at 0x%p for %d pages. Mapping to 0x%p\n", PhysicalStart, NumberOfPages, g_CurrentGuestPhysicalAddress);
-
-			Status = gBS->AllocatePages(AllocateAddress, EfiRuntimeServicesData, NumberOfPages, (EFI_PHYSICAL_ADDRESS*)&PhysicalStart);
-			if (EFI_ERROR(Status)) {
-				DebugPrint0402("Failed to reserve pages for guest. %r\n", Status);
-				goto Skip;
-			}
-
-			if (!MapPagesLinear(PhysicalStart, NumberOfPages, &g_CurrentGuestPhysicalAddress)) {
-				DebugPrint0402("Failed to map %d pages HPA 0x%p to GPA 0x%p\n", NumberOfPages, PhysicalStart, g_CurrentGuestPhysicalAddress);
-			}
-
-			DebugPrint0402("Mapped %d pages, new cursor: %p\n", NumberOfPages, g_CurrentGuestPhysicalAddress);
-
-			Skip:
-			TotalBytes += EFI_PAGES_TO_SIZE(NumberOfPages);
-		}
-
-		Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Desc + DescriptorSize);
+	EFI_STATUS Status = gBS->AllocatePages(AllocateAnyPages, EfiRuntimeServicesData, Pages, &GuestAddressSpaceBeginning);
+	if (EFI_ERROR(Status)) {
+		DebugPrint0402("Failed to allocate pages for guest's address space. %r", Status);
+		return Status;
 	}
 
-	DebugPrint0402("Total of 0x%p bytes of contiguous address space for the guest\n", TotalBytes);
+	if (!MapPagesLinear((UINT64)GuestAddressSpaceBeginning, Pages, &g_CurrentGuestPhysicalAddress)) {
+		DebugPrint0402("Failed to map %d pages HPA 0x%p to GPA 0x%p\n", Pages, GuestAddressSpaceBeginning, g_CurrentGuestPhysicalAddress);
+		return EFI_NO_MAPPING;
+	}
+
+	DebugPrint0402("Mapped 0x%p-0x%p for guest\n", GuestAddressSpaceBeginning, g_CurrentGuestPhysicalAddress);
 
 	//
 	// Setup guest firmware memory.
 	//
-	g_VmState.Firmware.Memory.TotalPages = EFI_SIZE_TO_PAGES(TotalBytes);
+	g_VmState.Firmware.Memory.TotalPages = Pages;
 
-	//
-	// First 10 (* 10) pages are used already. They are not free.
-	//
-	for (UINT32 i = 0; i < 100; i++) {
-		g_VmState.Firmware.Memory.MemoryBitmap[i] = MAX_UINT8;
-	}
+	UINT64 Pml4Gpa = 0;
+	UINT64 PdpteGpa = 0;
 
-	//
-	// Forcefully map the host physical memory holding our Guest Page Tables
-	// into the EPT. We will identity map them (GPA == HPA) so we can safely
-	// pass their HPA directly to GUEST_CR3. (200 IQ, for now. Considering that we are above the 4GB but I can't be bothered.)
-	//
-	UINT64 Pml4Hpa = (UINT64)&g_VmState.AddressSpace.IdentityPml4[0];
-	MapSinglePage(Pml4Hpa, Pml4Hpa, FALSE);
+	Status = GuestFindFreePages(AllocateAnyPages, 1, &Pml4Gpa);
+	ASSERT_EFI_ERROR(Status);
 
-	UINT64 PdpeHpa = (UINT64)&g_VmState.AddressSpace.IdentityPdpe[0];
-	//
-	// Identity map the PDPEs. Gently...
-	//
-	for (UINT32 i = 0; i < 512; i++) {
-		if (!MapSinglePage(PdpeHpa + (i * 0x1000), PdpeHpa + (i * 0x1000), FALSE)) {
-			DebugPrint0402("Failed to map Guest CR3 structures!\n");
-			return EFI_NO_MAPPING;
-		}
-	}
+	Status = GuestFindFreePages(AllocateAnyPages, 1, &PdpteGpa);
+	ASSERT_EFI_ERROR(Status);
 
-	//
-	// Map the HLT area for APs to wake up at.
-	//
-	if (!MapSinglePage((UINT64)&g_ApHalt, (UINT64)&g_ApHalt, FALSE)) {
-		DebugPrint0402("Failed to map Guest CR3 structures!\n");
+	PML4* Pml4Host;
+	PDPTE* PdpteHost;
+	if (!TranslateGuestPhysicalToHostPhysical(Pml4Gpa, (VOID*)&Pml4Host) ||
+		!TranslateGuestPhysicalToHostPhysical(PdpteGpa, (VOID*)&PdpteHost)) {
 		return EFI_NO_MAPPING;
 	}
-End:
-	gBS->FreePool(DescriptorArray);
+
+	Pml4Host->Present = TRUE;
+	Pml4Host->Write = TRUE;
+	Pml4Host->PhysicalAddress = PdpteGpa >> 12;
+
+	for (UINT32 i = 0; i < 512; i++) {
+		PdpteHost[i].Present = TRUE;
+		PdpteHost[i].Large = TRUE;
+		PdpteHost[i].Write = TRUE;
+		PdpteHost[i].PhysicalAddress = i;
+	}
+
+	g_VmState.AddressSpace.GuestCr3 = Pml4Gpa;
+	DebugPrint0402("Guest CR3 = 0x%p (GPA)\n", g_VmState.AddressSpace.GuestCr3);
+
+	//
+	// Allocate HLT section for APs.
+	//
+	UINT64 ApHaltGpa;
+	Status = GuestFindFreePages(AllocateAnyPages, 1, &ApHaltGpa);
+	ASSERT_EFI_ERROR(Status);
+
+	UINT8* ApHaltHost;
+	if (!TranslateGuestPhysicalToHostPhysical(ApHaltGpa, (VOID**)&ApHaltHost)) {
+		return EFI_NO_MAPPING;
+	}
+	ApHaltHost[0] = 0xFA;  // cli
+	ApHaltHost[1] = 0xF4;  // hlt
+	ApHaltHost[2] = 0xEB;  // jmp $-2
+	ApHaltHost[3] = 0xFE;  // (opcode for JMP)
+	DebugPrint0402("AP HLT page at GPA 0x%p\n", ApHaltGpa);
+
+	g_VmState.Firmware.ApHaltSection = ApHaltGpa;
+
+	//
+	// Setup GDT for guest.
+	//
+	UINT64 GdtGpa;
+	Status = GuestFindFreePages(AllocateAnyPages, 1, &GdtGpa);
+	ASSERT_EFI_ERROR(Status);
+
+	IA32_SEGMENT_DESCRIPTOR* Gdt = NULL;
+	if (!TranslateGuestPhysicalToHostPhysical(GdtGpa, (VOID**)&Gdt)) {
+		return EFI_NO_MAPPING;
+	}
+
+	gBS->SetMem(Gdt, EFI_PAGE_SIZE, 0);
+
+	//
+	// Null descriptor.
+	//
+	Gdt[0].Uint64 = 0;
+
+	//
+	// Data descriptor (index 6, selector 0x30)
+	//
+	Gdt[6].Bits.BaseLow = 0;
+	Gdt[6].Bits.BaseMid = 0;
+	Gdt[6].Bits.BaseHigh = 0;
+	Gdt[6].Bits.LimitLow = 0xFFFF;
+	Gdt[6].Bits.LimitHigh = 0xF;
+	Gdt[6].Bits.Type = 0x2;  // Data read/write
+	Gdt[6].Bits.S = 1;    // Code/data
+	Gdt[6].Bits.DPL = 0;
+	Gdt[6].Bits.P = 1;
+	Gdt[6].Bits.L = 0;
+	Gdt[6].Bits.DB = 1;    // 32-bit
+	Gdt[6].Bits.G = 1;    // 4 KB granularity
+
+	//
+	// Code descriptor (index 7, selector 0x38)
+	//
+	Gdt[7].Bits.BaseLow = 0;
+	Gdt[7].Bits.BaseMid = 0;
+	Gdt[7].Bits.BaseHigh = 0;
+	Gdt[7].Bits.LimitLow = 0xFFFF;
+	Gdt[7].Bits.LimitHigh = 0xF;
+	Gdt[7].Bits.Type = 0xA;  // Code execute/read
+	Gdt[7].Bits.S = 1;
+	Gdt[7].Bits.DPL = 0;
+	Gdt[7].Bits.P = 1;
+	Gdt[7].Bits.L = 1;    // Long mode
+	Gdt[7].Bits.DB = 0;
+	Gdt[7].Bits.G = 1;
+
+	//
+	// TSS.
+	//
+	UINT64 TssGpa;
+	Status = GuestFindFreePages(AllocateAnyPages, 1, &TssGpa);
+	ASSERT_EFI_ERROR(Status);
+
+	VOID* tssHost;
+	if (!TranslateGuestPhysicalToHostPhysical(TssGpa, &tssHost)) {
+		return EFI_NO_MAPPING;
+	}
+	gBS->SetMem(tssHost, EFI_PAGE_SIZE, 0);
+
+	Gdt[8].Bits.BaseLow = (UINT16)(TssGpa & 0xFFFF);
+	Gdt[8].Bits.BaseMid = (UINT8)((TssGpa >> 16) & 0xFF);
+	Gdt[8].Bits.BaseHigh = (UINT8)((TssGpa >> 24) & 0xFF);
+	Gdt[8].Bits.LimitLow = 103;    // Minimal size
+	Gdt[8].Bits.LimitHigh = 0;
+	Gdt[8].Bits.Type = 0xB;    // 32-bit TSS available
+	Gdt[8].Bits.S = 0;      // System descriptor
+	Gdt[8].Bits.DPL = 0;
+	Gdt[8].Bits.P = 1;
+	Gdt[8].Bits.G = 0;      // Byte granularity
+
+	//
+	// 64-bit TSS descriptor occupies two GDT slots (entries 8 & 9).
+	// GDT[9] was already zeroed by SetMem above; the upper 32 bits of
+	// the TSS base address are 0, which is correct for GPA 0x4000.
+	//
+
+	g_VmState.SharedState.GuestGdtBase = (VOID*)GdtGpa;
+	g_VmState.SharedState.GuestGdtLimit = 10 * 8 - 1;   // 10 descriptors → 79 (TSS needs 16 bytes)
+	g_VmState.SharedState.GuestTssBase = (VOID*)TssGpa;
+	g_VmState.SharedState.TrSelector = 0x40;   // index 8, RPL 0
+	g_VmState.SharedState.TrAccessRights = 0x8B;   // Present, 32-bit TSS available
+	g_VmState.SharedState.TrLimit = 103;
+
+	//
+	// IDT.
+	//
+	UINT64 IdtGpa;
+	Status = GuestFindFreePages(AllocateAnyPages, 1, &IdtGpa);
+	ASSERT_EFI_ERROR(Status);
+	VOID* IdtHost;
+	if (!TranslateGuestPhysicalToHostPhysical(IdtGpa, &IdtHost)) {
+		return EFI_NO_MAPPING;
+	}
+	gBS->SetMem(IdtHost, EFI_PAGE_SIZE, 0);
+	g_VmState.SharedState.GuestIdtBase = (VOID*)IdtGpa;
+	g_VmState.SharedState.GuestIdtLimit = 0;
+
 	return Status;
 }
 
@@ -488,8 +514,7 @@ UefiMain(
 	//
 	// We need this for debugging
 	//
-	if (Status == EFI_SUCCESS
-		&& FALSE) {
+	if (Status == EFI_SUCCESS && FALSE) {
 		DebugPrint0402("Catalyst.efi loaded at 0x%p, with size 0x%p", LoadedImage->ImageBase, LoadedImage->ImageSize);
 		{
 			volatile UINT32 Spin = 1;

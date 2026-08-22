@@ -66,5 +66,5 @@ IxSetMem(
 	IN UINTN    Size,
 	IN UINT8    Value
 ) {
-	IxSetMem(Buffer, Size, Value);
+	SetMem(Buffer, Size, Value);
 }

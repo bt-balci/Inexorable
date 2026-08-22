@@ -30,8 +30,6 @@ extern CONST UINTN g_InexorableEfiSize;
 
 extern UINT64 g_CurrentGuestPhysicalAddress;
 
-extern CONST UINT8 g_ApHalt[];
-
 UINTN
 EFIAPI
 DebugPrint0402(
