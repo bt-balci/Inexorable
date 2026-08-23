@@ -52,8 +52,8 @@ EFI_STATUS
 EFIAPI
 IxOpenProtocol(
 	IN EFI_HANDLE	Handle,
-	IN EFI_GUID* Protocol,
-	OUT VOID** Interface OPTIONAL,
+	IN EFI_GUID*	Protocol,
+	OUT VOID**		Interface OPTIONAL,
 	IN EFI_HANDLE	AgentHandle,
 	IN EFI_HANDLE	ControllerHandle,
 	IN UINT32		Attributes
@@ -65,9 +65,9 @@ IxOpenProtocol(
 EFI_STATUS
 EFIAPI
 IxLocateProtocol(
-	IN EFI_GUID* Protocol,
-	IN VOID* Registration OPTIONAL,
-	OUT VOID** Interface
+	IN EFI_GUID*	Protocol,
+	IN VOID*		Registration OPTIONAL, // Optional indeed
+	OUT VOID**		Interface
 ) {
 	LIST_ENTRY* Link;
 	INEXORABLE_FIRMWARE_PROTOCOL* FwProtocol;
@@ -89,10 +89,10 @@ IxLocateProtocol(
 EFI_STATUS
 EFIAPI
 IxInstallProtocolInterface(
-	IN OUT EFI_HANDLE* Handle,
-	IN EFI_GUID* Protocol,
+	IN OUT EFI_HANDLE*		Handle,
+	IN EFI_GUID*			Protocol,
 	IN EFI_INTERFACE_TYPE	InterfaceType,
-	IN VOID* Interface
+	IN VOID*				Interface
 ) {
 	INEXORABLE_FIRMWARE_PROTOCOL* FwProtocol = NULL;
 	INEXORABLE_FIRMWARE_HANDLE* FwHandle = NULL;

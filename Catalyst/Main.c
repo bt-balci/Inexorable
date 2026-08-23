@@ -166,23 +166,18 @@ LoadFirmware(
 
 	EFI_IMAGE_OPTIONAL_HEADER64* OptionalHeader = &NtHeaders->OptionalHeader;
 
+	if (OptionalHeader->SectionAlignment != 0x1000) {
+		DebugPrint0402("LoadFirmware: FAIL: The firmware executable's section alignment must be 0x1000.\n");
+		return EFI_UNSUPPORTED;
+	}
+
 	//
 	// Virgins relocate images.
 	// Chads put them whereever they want to be.
 	// Haters will talk about ASLR.
 	// Chad will just virtualize address space via EPTs.
 	//
-	if (OptionalHeader->ImageBase != FIRMWARE_IMAGE_BASE) {
-		DebugPrint0402("LoadFirmware: FAIL: The firmware preferred ImageBase must be exactly 0x%p.\n", FIRMWARE_IMAGE_BASE);
-		return EFI_UNSUPPORTED;
-	}
-
-	if (OptionalHeader->SectionAlignment != 0x1000) {
-		DebugPrint0402("LoadFirmware: FAIL: The firmware executable's section alignment must be 0x1000.\n");
-		return EFI_UNSUPPORTED;
-	}
-
-	UINT64 GuestBaseAddress = FIRMWARE_IMAGE_BASE;
+	UINT64 GuestBaseAddress = OptionalHeader->ImageBase;
 	UINT8* HostBaseAddress = NULL;
 
 	if (EFI_ERROR(GuestFindFreePages(AllocateAddress, EFI_SIZE_TO_PAGES(OptionalHeader->SizeOfImage), &GuestBaseAddress))) {
@@ -259,8 +254,8 @@ LoadFirmware(
 		Section++;
 	}
 
-	*GuestEntryPoint = (VOID*)(UINT64)OptionalHeader->AddressOfEntryPoint + FIRMWARE_IMAGE_BASE;
-	DebugPrint0402("LoadFirmware: Firmware mapped. ImageSize = 0x%p, ImageBase = 0x%p, EntryPointt = 0x%p\n", OptionalHeader->SizeOfImage, FIRMWARE_IMAGE_BASE, *GuestEntryPoint);
+	*GuestEntryPoint = (VOID*)(UINT64)OptionalHeader->AddressOfEntryPoint + OptionalHeader->ImageBase;
+	DebugPrint0402("LoadFirmware: Firmware mapped. ImageSize = 0x%p, ImageBase = 0x%p, EntryPointt = 0x%p\n", OptionalHeader->SizeOfImage, OptionalHeader->ImageBase, *GuestEntryPoint);
 
 	return EFI_SUCCESS;
 }

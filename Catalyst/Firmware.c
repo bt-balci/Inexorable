@@ -189,7 +189,7 @@ FirmwareGetNextVariableName(
 )
 {
 	UINTN       NameSize = 0;
-	CHAR16*		Name = NULL;
+	CHAR16* Name = NULL;
 	EFI_GUID    VendorGuid = { 0 };
 	BOOLEAN     HaveGuid = FALSE;
 
@@ -507,7 +507,7 @@ EFIAPI
 GuestFindFreePages(
 	IN EFI_ALLOCATE_TYPE	AllocationType,
 	IN UINTN				Pages,
-	IN OUT UINT64*			OutPageBase
+	IN OUT UINT64* OutPageBase
 ) {
 	UINT64 MaxAddrPage = 0;
 	UINT64 Start = 0;
@@ -521,20 +521,30 @@ GuestFindFreePages(
 		// Input is a GPA, convert to page index.
 		//
 		Start = *OutPageBase >> EFI_PAGE_SHIFT;
+		UINT64 End = Start + Pages - 1;
+		DebugPrint0402("GuestFindFreePages (AllocateAddress): requested GPA base=0x%p until=0x%p (pages %d..%d)\n",
+			Start << EFI_PAGE_SHIFT, (Start + Pages) << EFI_PAGE_SHIFT, Start, End);
+
 		for (UINT64 j = Start; j < Start + Pages; j++) {
 			UINT64 Byte = j / 8;
 			UINT8  Bit = j % 8;
 			if (g_VmState.Firmware.Memory.MemoryBitmap[Byte] & (1 << Bit)) {
+				DebugPrint0402("GuestFindFreePages (AllocateAddress): page %d is already allocated, failing\n", j);
 				return EFI_OUT_OF_RESOURCES;
 			}
 		}
+		//
 		// Mark and return
+		//
 		for (UINT64 j = Start; j < Start + Pages; j++) {
 			UINT64 Byte = j / 8;
 			UINT8  Bit = j % 8;
 			g_VmState.Firmware.Memory.MemoryBitmap[Byte] |= (1 << Bit);
 		}
 		*OutPageBase = Start << EFI_PAGE_SHIFT;
+
+		DebugPrint0402("GuestFindFreePages (AllocateAddress): SUCCESS, GPA base=0x%p until=0x%p (pages %d..%d)\n",
+			*OutPageBase, *OutPageBase + (Pages << EFI_PAGE_SHIFT), Start, End);
 		return EFI_SUCCESS;
 	}
 	else if (AllocationType == AllocateMaxAddress) {
@@ -544,12 +554,16 @@ GuestFindFreePages(
 		//
 		MaxAddrPage = *OutPageBase >> EFI_PAGE_SHIFT;
 		if (MaxAddrPage < Pages - 1) {
+			DebugPrint0402("GuestFindFreePages (AllocateMaxAddress): Max page %d too small for %d pages\n", MaxAddrPage, Pages);
 			return EFI_OUT_OF_RESOURCES;
 		}
+		DebugPrint0402("GuestFindFreePages (AllocateMaxAddress): Max GPA=0x%p (page %d), searching from hint %d\n",
+			MaxAddrPage << EFI_PAGE_SHIFT, MaxAddrPage, g_VmState.Firmware.Memory.NextFreeHint);
 
 		Start = g_VmState.Firmware.Memory.NextFreeHint;
 		if (Start > MaxAddrPage - Pages + 1) {
 			Start = 0;  // Hint out of range, start at bottom
+			DebugPrint0402("GuestFindFreePages (AllocateMaxAddress): Hint out of range, reset to 0\n");
 		}
 	}
 	else {
@@ -558,6 +572,9 @@ GuestFindFreePages(
 		//
 		MaxAddrPage = g_VmState.Firmware.Memory.TotalPages;
 		Start = g_VmState.Firmware.Memory.NextFreeHint;
+
+		DebugPrint0402("GuestFindFreePages (AllocateAnyPages): total pages %d, starting from hint %d\n",
+			MaxAddrPage, Start);
 	}
 
 	UINT64 i = Start;
@@ -569,6 +586,8 @@ GuestFindFreePages(
 			// For AllocateMaxAddress we cannot cross the max. Wrap to 0 if not wrapped yet.
 			//
 			if (AllocationType == AllocateMaxAddress && Start != 0) {
+				DebugPrint0402("GuestFindFreePages (AllocateMaxAddress): crossed max page %d, wrapping to 0\n", MaxAddrPage);
+
 				i = 0;
 				Found = 0;
 				//
@@ -577,6 +596,7 @@ GuestFindFreePages(
 				Start = 0;
 				continue;
 			}
+			DebugPrint0402("GuestFindFreePages: Allocation failed i=%d, Pages=%d, MaxAddrPage=%d\n", i, Pages, MaxAddrPage);
 			return EFI_OUT_OF_RESOURCES;
 		}
 
@@ -591,7 +611,7 @@ GuestFindFreePages(
 
 				VOID* HostAddress = NULL;
 				if (!TranslateGuestPhysicalToHostPhysical((Base << EFI_PAGE_SHIFT), &HostAddress)) {
-					DebugPrint0402("GuestFindFreePages: FAILED: GPA does not correspond to any HPA");
+					DebugPrint0402("GuestFindFreePages: Allocation faiiled, GPA does not correspond to any HPA");
 					g_VmState.Firmware.Memory.MemoryBitmap[Byte] &= ~(1 << Bit);
 					return EFI_NO_MAPPING;
 				}
@@ -604,8 +624,10 @@ GuestFindFreePages(
 				g_VmState.Firmware.Memory.NextFreeHint = Base + Pages;
 				*OutPageBase = Base << EFI_PAGE_SHIFT;
 
-				DebugPrint0402("GuestFindFreePages: SUCCESS Base=0x%p (GPA) Base=0x%p (HPA), NextHint=%d\n",
-					*OutPageBase, HostAddress, g_VmState.Firmware.Memory.NextFreeHint);
+				DebugPrint0402("GuestFindFreePages: SUCCESS, GPA base=0x%p until=0x%p, HPA base=0x%p until=0x%p, NextHint=%d\n",
+					*OutPageBase, *OutPageBase + (Pages << EFI_PAGE_SHIFT),
+					HostAddress, (VOID*)((UINTN)HostAddress + (Pages << EFI_PAGE_SHIFT)),
+					g_VmState.Firmware.Memory.NextFreeHint);
 				return EFI_SUCCESS;
 			}
 		}
@@ -714,21 +736,21 @@ FirmwareAllocatePages(
 	//
 	EFI_ALLOCATE_TYPE AllocationType = Cpu->Context.Rcx;
 	UINTN Pages = Cpu->Context.R8;
-	UINT64 OutPtr = 0;
+	UINT64 TargetAddressPtr = Cpu->Context.R9;
+	UINT64 TargetAddress = 0;
 
-	DebugPrint0402("AllocatePages: Type=%d, Pages=%d, OutPtr=0x%p\n", AllocationType, Pages, Cpu->Context.R9);
+	DebugPrint0402("AllocatePages: Type=%d, Pages=%d, TargetAddressPtr=0x%p\n", AllocationType, Pages, TargetAddressPtr);
 
-	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)OutPtr, Cpu->Context.R9, sizeof(OutPtr))) goto EndPageFault;
+	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&TargetAddress, TargetAddressPtr, sizeof(TargetAddress))) goto EndPageFault;
 
-	UINT64 Allocated = 0;
-	Cpu->Context.Rax = GuestFindFreePages(AllocationType, Pages, (UINT64*)&Allocated);
+	Cpu->Context.Rax = GuestFindFreePages(AllocationType, Pages, &TargetAddress);
 
 	DebugPrint0402("AllocatePages: result=%r, allocated GPA=0x%p (page %d)\n",
-	Cpu->Context.Rax, Allocated, Allocated >> EFI_PAGE_SHIFT);
+		Cpu->Context.Rax, TargetAddress, TargetAddress >> EFI_PAGE_SHIFT);
 
 	if (EFI_ERROR(Cpu->Context.Rax)) return;
 
-	if (CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Allocated, OutPtr, sizeof(Allocated))) return;
+	if (CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&TargetAddress, TargetAddressPtr, sizeof(TargetAddress))) return;
 
 EndPageFault:
 	{
@@ -809,9 +831,6 @@ FirmwareGetMemoryMap(
 	//
 	g_VmState.Firmware.Memory.MapKey++;
 
-	DebugPrint0402("GetMemoryMap: MapKey=%d, TotalPages=%d\n",
-		g_VmState.Firmware.Memory.MapKey, g_VmState.Firmware.Memory.TotalPages);
-
 	UINT64 MemoryMapSizePtr = Cpu->Context.Rcx;
 	UINTN MemoryMapSize = 0;
 
@@ -827,13 +846,19 @@ FirmwareGetMemoryMap(
 
 	if (!CopyFromGuest(Cpu->ExtendedContext.Cr3, (VOID*)&MemoryMapSize, MemoryMapSizePtr, sizeof(MemoryMapSize))) goto EndPageFault;
 
-	UINTN MaximumDescriptors = MemoryMapSize / DescriptorSize;
+	DebugPrint0402("GetMemoryMap: MapKey=%d, TotalPages=%d, MemoryMapSize=0x%p, DescriptorSize=0x%p DescriptorVersion=%d\n",
+		g_VmState.Firmware.Memory.MapKey, g_VmState.Firmware.Memory.TotalPages, MemoryMapSize, DescriptorSize, DescriptorVersion);
+
+	UINTN CurrentMapSize = 0;
+	BOOLEAN BufferTooSmall = FALSE;
 
 	//
 	// Count = Descriptors written
 	// i = Current page
 	//
-	for (UINT32 i = 0, Count = 0; i < g_VmState.Firmware.Memory.TotalPages; i++) {
+	UINT32 Count = 0;
+	UINT32 i = 0;
+	while (i < g_VmState.Firmware.Memory.TotalPages) {
 		BOOLEAN Allocated = (g_VmState.Firmware.Memory.MemoryBitmap[i / 8] >> (i % 8)) & 1;
 
 		UINT64 Start = i;
@@ -844,48 +869,44 @@ FirmwareGetMemoryMap(
 			i++;
 		}
 
-		UINT64 Pages = i - Start;
-
-		//
-		// Return required size if buffer is too small.
-		//
-		if (Count >= MaximumDescriptors) {
-			Cpu->Context.Rax = EFI_BUFFER_TOO_SMALL;
-			goto End;
-		}
-
 		EFI_MEMORY_DESCRIPTOR Descriptor = {
 			.PhysicalStart = Start * EFI_PAGE_SIZE,
 			//
 			// The bootloader doesn't care about the type. It only cares whether it can be used for OS. So we return EfiConventionalMemory for free or EfiUnusableMemory and for allocated..
 			//
 			.Type = Allocated ? EfiUnusableMemory : EfiConventionalMemory,
-			.NumberOfPages = Pages,
+			.NumberOfPages = i - Start,
 			.Attribute = EFI_MEMORY_RUNTIME,
 			.VirtualStart = 0
 		};
 
-		//
-		// Remember, guest address might not be a contiguous address. We have to copy it. One by one.
-		//
-		if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Descriptor, MemoryMapPtr + (DescriptorSize * Count), DescriptorSize)) goto EndPageFault;
+		DebugPrint0402("GetMemoryMap: Descriptor PhysicalStart = 0x%p, Free=%d, NumberOfPages=0x%p, Attribute=%d\n",
+			Descriptor.PhysicalStart, Allocated, Descriptor.NumberOfPages, Descriptor.Attribute);
+
+		if (CurrentMapSize >= MemoryMapSize) {
+			BufferTooSmall = TRUE;
+		}
+		else {
+			if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&Descriptor, MemoryMapPtr + (DescriptorSize * Count), DescriptorSize)) goto EndPageFault;
+		}
 
 		Count++;
-		MemoryMapSize = Count * DescriptorSize;
+		CurrentMapSize = Count * DescriptorSize;
+
+		DebugPrint0402("GetMemoryMap: Count = %d, CurrentMapSize = 0x%p\n", Count, CurrentMapSize);
 	}
 
-End:
-	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&MemoryMapSize, MemoryMapSizePtr, sizeof(MemoryMapSize))) goto EndPageFault;
+	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&CurrentMapSize, MemoryMapSizePtr, sizeof(CurrentMapSize))) goto EndPageFault;
 	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&DescriptorSize, DescriptorSizePtr, sizeof(DescriptorSizePtr))) goto EndPageFault;
 	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&DescriptorVersion, DescriptorVersionPtr, sizeof(DescriptorVersion))) goto EndPageFault;
 	if (!CopyToGuest(Cpu->ExtendedContext.Cr3, (VOID*)&MapKey, MapKeyPtr, sizeof(MapKey))) goto EndPageFault;
 
-	Cpu->Context.Rax = EFI_SUCCESS;
+	Cpu->Context.Rax = BufferTooSmall ? EFI_BUFFER_TOO_SMALL : EFI_SUCCESS;
 
-DebugPrint0402("GetMemoryMap: SUCCESS, MapKey=%d, MemoryMapSize=%d, DescriptorSize=%d\n",
-	MapKey, MemoryMapSize, DescriptorSize);
+	DebugPrint0402("GetMemoryMap: SUCCESS, MapKey=%d, MemoryMapSize=%d, DescriptorSize=%d, Result %r\n",
+		MapKey, CurrentMapSize, DescriptorSize, Cpu->Context.Rax);
 
-return;
+	return;
 
 EndPageFault:
 	{
@@ -931,10 +952,10 @@ UINT64
 EFIAPI
 GenerateProtocolCallStub(
 	IN CR3		GuestCr3,
-	IN VOID*	HostThis,
-	IN VOID*	HostFunc,
+	IN VOID* HostThis,
+	IN VOID* HostFunc,
 	IN UINTN	FuncIndex,
-	IN GUID*	Guid
+	IN GUID* Guid
 ) {
 	DebugPrint0402("GenerateProtocolCallStub: HostThis=0x%p, HostFunc=0x%p, FuncIndex=%d, GUID=%g\n", HostThis, HostFunc, FuncIndex, Guid);
 
@@ -1027,9 +1048,9 @@ EFI_STATUS
 EFIAPI
 ReplicateProtocol(
 	IN CR3			GuestCr3,
-	IN EFI_GUID*	Guid,
-	IN VOID*		HostInterface,
-	OUT UINT64*		GuestInterface
+	IN EFI_GUID* Guid,
+	IN VOID* HostInterface,
+	OUT UINT64* GuestInterface
 ) {
 	DebugPrint0402("ReplicateProtocol: GUID=%g, HostInterface=0x%p\n", Guid, HostInterface);
 
@@ -1069,7 +1090,7 @@ ReplicateProtocol(
 		UINTN Offset = Info->Functions.Offsets[i];
 		VOID** HostFuncPtr = (VOID**)((UINT8*)HostInterface + Offset);
 		VOID* HostFunc = *HostFuncPtr;
-		
+
 		DebugPrint0402("ReplicateProtocol: Function[%d] at offset 0x%x, HostFunc=0x%p\n", i, Offset, HostFunc);
 
 		UINT64 Stub = GenerateProtocolCallStub(GuestCr3, HostInterface, HostFunc, i, Guid);

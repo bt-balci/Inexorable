@@ -74,5 +74,16 @@
     <ClInclude Include="Firmware.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Elf.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Boot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="Boot.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

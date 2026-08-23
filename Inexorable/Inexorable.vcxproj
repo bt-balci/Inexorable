@@ -151,7 +151,7 @@
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
       <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
-      <BaseAddress>0x10000</BaseAddress>
+      <BaseAddress>0x30000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
       <FixedBaseAddress>true</FixedBaseAddress>
       <SectionAlignment>4096</SectionAlignment>
@@ -202,7 +202,9 @@
     <ClCompile Include="x86.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Boot.h" />
     <ClInclude Include="Efi.h" />
+    <ClInclude Include="Elf.h" />
     <ClInclude Include="Firmware.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="Misc.h" />
@@ -213,6 +215,9 @@
     <ClInclude Include="VirtualMemory.h" />
     <ClInclude Include="Vm.h" />
     <ClInclude Include="x86.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="Boot.asm" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

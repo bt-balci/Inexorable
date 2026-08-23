@@ -8,11 +8,6 @@
 ////			  Definitions			   ////
 ///////////////////////////////////////////////
 
-//
-// It's recommended to put firmware above 0x10000 mark since MapMemory will utilize the first few kilobytes of memory for page tables.
-//
-#define FIRMWARE_IMAGE_BASE			0x10000
-
 #define ACPI_RSDP_BASE				0x20000
 #define ACPI_XSDT_BASE				0x21000
 #define ACPI_MADT_BASE				0x22000
@@ -23,7 +18,7 @@
 
 #define CONFIG_CPU_COUNT			4
 
-#define MAXIMUM_GUEST_ALLOCATIONS	1024
+#define MAXIMUM_GUEST_MEMORY_PAGES (SIZE_1GB / EFI_PAGE_SIZE)
 
 #define HOST_RESERVED_HEAP_SIZE		SIZE_4MB
 
@@ -155,7 +150,7 @@ typedef struct {
 			//
 			UINTN MapKey;
 
-			UINT8 MemoryBitmap[MAXIMUM_GUEST_ALLOCATIONS / 8];
+			UINT8 MemoryBitmap[MAXIMUM_GUEST_MEMORY_PAGES / 8];
 			UINTN TotalPages;
 			UINTN NextFreeHint;
 		} Memory;
