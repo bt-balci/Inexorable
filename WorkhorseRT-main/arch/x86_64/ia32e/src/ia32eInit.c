@@ -710,7 +710,7 @@ void ia32eInterfacesInit(void)
 
 /* Register initcalls */
 
-K_REGISTER_INITCALL(ia32eMask8259, ia32eMask8259,                                           000);
+//K_REGISTER_INITCALL(ia32eMask8259, ia32eMask8259,                                           000);
 K_REGISTER_INITCALL(ia32eUartInit, ia32eUartInit,                                           001);
 K_REGISTER_INITCALL(ia32eEarlyIdtInit, ia32eEarlyIdtInit,                                   002);
 K_REGISTER_INITCALL(ia32eVmaInit, ia32eVmaInit,                                             003);

@@ -47,6 +47,18 @@
 	((UINT64)(entry)->BaseUpper << 32) \
 )
 
+#define PIC1_COMMAND		0x20
+#define PIC2_COMMAND		0xA0
+#define PIC_EOI				0x20
+
+#define PIC_IRQ_OFFSET		0x20
+#define PIC_IRQ_END			0x2F
+#define PIC_SLAVE_OFFSET	0x28
+
+#define RFLAGS_IF			0x200
+
+#define QEMU_DEBUG_PORT		0x402
+
 ///////////////////////////////////////////////
 ////				Enums				   ////
 ///////////////////////////////////////////////

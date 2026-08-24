@@ -113,6 +113,8 @@ DumpVmcs(
 	DUMP_VMCS_FIELD(GUEST_IA32_SYSENTER_EIP, "GUEST_IA32_SYSENTER_EIP");
 	DUMP_VMCS_FIELD(GUEST_IA32_SYSENTER_ESP, "GUEST_IA32_SYSENTER_ESP");
 
+	DUMP_VMCS_FIELD(GUEST_IA32_EFER_FULL, "GUEST_IA32_EFER_FULL");
+
 	DUMP_VMCS_FIELD(GUEST_LINK_PTR_FULL, "GUEST_LINK_PTR_FULL");
 
 	DUMP_VMCS_FIELD(GUEST_CR0, "GUEST_CR0");
@@ -128,6 +130,48 @@ DumpVmcs(
 	DUMP_VMCS_FIELD(GUEST_PDPTE3_FULL, "GUEST_PDPTE3_FULL");
 
 	DebugPrint0402("--- END VMCS DUMP ---\n");
+	DebugPrint0402("--- BEGIN CONTEXT DUMP ---\n");
+
+	CATALYST_VIRTUAL_CPU* Cpu = (CATALYST_VIRTUAL_CPU*)_readgsbase_u64();
+
+	DebugPrint0402(
+		"RIP = 0x%p\n"
+		"RSP = 0x%p\n"
+		"RAX = 0x%p\n"
+		"RBX = 0x%p\n"
+		"RCX = 0x%p\n"
+		"RDX = 0x%p\n"
+		"RSI = 0x%p\n"
+		"RDI = 0x%p\n"
+		"RBP = 0x%p\n"
+		"R8  = 0x%p\n"
+		"R9  = 0x%p\n"
+		"R10 = 0x%p\n"
+		"R11 = 0x%p\n"
+		"R12 = 0x%p\n"
+		"R13 = 0x%p\n"
+		"R14 = 0x%p\n"
+		"R15 = 0x%p\n",
+		Cpu->Context.Rip,
+		Cpu->Context.Rsp,
+		Cpu->Context.Rax,
+		Cpu->Context.Rbx,
+		Cpu->Context.Rcx,
+		Cpu->Context.Rdx,
+		Cpu->Context.Rsi,
+		Cpu->Context.Rdi,
+		Cpu->Context.Rbp,
+		Cpu->Context.R8,
+		Cpu->Context.R9,
+		Cpu->Context.R10,
+		Cpu->Context.R11,
+		Cpu->Context.R12,
+		Cpu->Context.R13,
+		Cpu->Context.R14,
+		Cpu->Context.R15
+	);
+
+	DebugPrint0402("--- END CONTEXT DUMP ---\n");
 
 #undef DUMP_VMCS_FIELD
 }
@@ -167,12 +211,19 @@ VmExitHandler(
 	UINT64 ExitReason = 0;
 	UINT64 ExitInstructionLen = 0;
 
+	UINT64 HpaRip = 0;
+	UINT64 HpaRsp = 0;
+
 	__vmx_vmread(READONLY_EXIT_QUALIFICATION, &ExitQualification);
 	__vmx_vmread(READONLY_EXIT_REASON, &ExitReason);
 	__vmx_vmread(READONLY_VMEXIT_INSTRUCTION_LEN, &ExitInstructionLen);
 
 	__vmx_vmread(GUEST_RIP, &Cpu->Context.Rip);
 	__vmx_vmread(GUEST_RSP, &Cpu->Context.Rsp);
+	//
+	// I guess
+	//
+	__vmx_vmread(GUEST_RFLAGS, &Cpu->Context.RFlags);
 
 	__vmx_vmread(GUEST_CR3, &Cpu->ExtendedContext.Cr3.All);
 
@@ -242,6 +293,37 @@ VmExitHandler(
 		Borked = TRUE;
 		break;
 	}
+
+	case VMEXIT_REASON_WRMSR: {
+		UINT64 MsrValue = ((Cpu->Context.Rdx & 0xFFFFFFFF) << 32) | (Cpu->Context.Rax & 0xFFFFFFFF);
+		UINT64 Msr = Cpu->Context.Rcx;
+		DebugPrint0402("Guest writes 0x%p to 0x%p\n", MsrValue, Msr);
+		if (Msr == IA32_EFER) {
+			DebugPrint0402("Passthrough EFER...\n");
+			__vmx_vmwrite(GUEST_IA32_EFER_FULL, MsrValue);
+		}
+		else {
+			__writemsr(Msr, MsrValue);
+		}
+		break;
+	}
+	case VMEXIT_REASON_RDMSR: {
+		UINT64 Msr = Cpu->Context.Rcx;
+		UINT64 MsrValue = 0;
+		if (Msr == IA32_EFER) {
+			__vmx_vmread(GUEST_IA32_EFER_FULL, &MsrValue);
+		}
+		else {
+			MsrValue = __readmsr(Msr);
+		}
+
+		DebugPrint0402("Guest reads 0x%p as 0x%p\n", Msr, MsrValue);
+
+		Cpu->Context.Rdx = (UINT32)(MsrValue >> 32);
+		Cpu->Context.Rax = (UINT32)MsrValue;
+		break;
+	}
+
 
 	case VMEXIT_REASON_VMCALL:
 		DebugPrint0402("VMCALL[%d]: Fn=0x%x RCX=0x%p RDX=0x%p R8=0x%p R9=0x%p R10=0x%p R11=0x%p\n",
@@ -341,7 +423,91 @@ VmExitHandler(
 		// Fall through to advance RIP
 		//
 		break;
+	case VMEXIT_REASON_IO_INSTRUCTION: {
+		//
+		// Ok.
+		//
 
+		VMX_EXIT_QUALIFICATION_IO IoQualification = { .All = ExitQualification };
+
+		if (IoQualification.Direction == 0) {
+			DebugPrint0402("Guest wrote %d to port %d\n", Cpu->Context.Rax, IoQualification.PortNumber);
+		} else {
+			DebugPrint0402("Guest read from port %d\n", IoQualification.PortNumber);
+		}
+
+
+		break;
+	}
+	case VMEXIT_REASON_EXT_INT: {
+		//
+		// Not our problem.
+		//
+		VMX_INTERRUPTION_INFORMATION InterruptionInfo = { 0 };
+		__vmx_vmread(READONLY_VMEXIT_INTERRUPTION_INFO, (UINT64*)&InterruptionInfo.All);
+
+		DebugPrint0402("Guest received external interrupt. Vector = %d, Type = %d, Deliver = %d, Valid = %d\n",
+			InterruptionInfo.Vector, InterruptionInfo.Type,
+			InterruptionInfo.DeliverErrorCode, InterruptionInfo.Valid);
+
+		if (InterruptionInfo.Valid) {
+			//
+			// Retarded PIC.
+			//
+			if (InterruptionInfo.Vector == 32) {
+				volatile UINT32* LApicEoi = (volatile UINT32*)0xFEE000B0;
+				*LApicEoi = 0;
+			}
+
+			//
+			// EOI the pic.
+			//
+			if (InterruptionInfo.Vector >= PIC_IRQ_OFFSET && InterruptionInfo.Vector <= PIC_IRQ_END) {
+				__outb(PIC1_COMMAND, PIC_EOI);
+				if (InterruptionInfo.Vector >= PIC_SLAVE_OFFSET) {
+					__outb(PIC2_COMMAND, PIC_EOI);
+				}
+			}
+
+			if ((Cpu->Context.RFlags & RFLAGS_IF) != 0) {
+				DebugPrint0402("External interrupt has been injected\n");
+				InjectEvent(0, FALSE, InterruptionInfo.Vector, InterruptionTypeExternalInterrupt, InterruptionInfo.Valid);
+			}
+			else {
+				DebugPrint0402("Guest has RFLAGS.IF disabled. Enabling external interrupt exiting.\n");
+				//
+				// Retarded guest.
+				//
+				Cpu->Hardware.HasPendingInterrupt = TRUE;
+				Cpu->Hardware.PendingInterrupt = InterruptionInfo;
+
+				UINT64 PrimaryControl = 0;
+				__vmx_vmread(PRIMARY_PROCBASED_EXEC_CONTROLS, &PrimaryControl);
+				PrimaryControl |= ProcessorBasedInterruptWindowExiting;
+				__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, PrimaryControl);
+			}
+
+		}
+
+		//
+		// Stay where you are.
+		//
+		ExitInstructionLen = 0;
+		break;
+	}
+	case VMEXIT_REASON_INTERRUPT_WINDOW: {
+		DebugPrint0402("Guest enabled RFLAGS.IF. Injecting pending interrupt...\n");
+		UINT64 PrimaryControl = 0;
+		__vmx_vmread(PRIMARY_PROCBASED_EXEC_CONTROLS, &PrimaryControl);
+		PrimaryControl &= ~ProcessorBasedInterruptWindowExiting;
+		__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, PrimaryControl);
+
+		if (Cpu->Hardware.HasPendingInterrupt) {
+			InjectEvent(0, FALSE, Cpu->Hardware.PendingInterrupt.Vector, InterruptionTypeExternalInterrupt, Cpu->Hardware.PendingInterrupt.Valid);
+			Cpu->Hardware.HasPendingInterrupt = FALSE;
+		}
+		break;
+	}
 	default:
 		DebugPrint0402("VMEXIT[%d]: UNKNOWN EXIT REASON %d (0x%x) — BORKED\n",
 			Cpu->Index, ExitReason, ExitReason);
@@ -355,7 +521,7 @@ VmExitHandler(
 	if (Borked) {
 		DebugPrint0402("VMEXIT[%d]: BORKED — dumping VMCS and halting\n", Cpu->Index);
 		DumpVmcs();
-		__asm__ __volatile__ ("hlt");
+		__asm__ __volatile__("hlt");
 	}
 	else {
 		//
@@ -437,20 +603,31 @@ SetupVmcs(
 	//
 	// Initialize controls.
 	//
-	__vmx_vmwrite(VMEXIT_CONTROLS, AdjustVmcsControl(VMEXIT_CONTROLS, VmExitHostAddressSpaceSize));
-	__vmx_vmwrite(VMENTRY_CONTROLS, AdjustVmcsControl(VMENTRY_CONTROLS, VmEntryIa32eModeGuest));
+	__vmx_vmwrite(VMEXIT_CONTROLS, AdjustVmcsControl(VMEXIT_CONTROLS, VmExitHostAddressSpaceSize | VmExitSaveIa32Efer | VmExitAckInterruptOnExit));
+	__vmx_vmwrite(VMENTRY_CONTROLS, AdjustVmcsControl(VMENTRY_CONTROLS, VmEntryIa32eModeGuest | VmEntryLoadIa32Efer));
 	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, PinBasedExternalInterruptExiting));
 
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseMsrBitmaps)));
+		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseIoBitmaps)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt)));
+		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt
+			| ProcessorBased2UnrestrictedGuest)));
 
 	__vmx_vmwrite(EPTP_FULL, g_VmState.AddressSpace.Eptp.All);
 	__vmx_vmwrite(MSR_BITMAPS_ADDR_FULL, (UINT64)&Cpu->Data.MsrBitmap);
 	__vmx_vmwrite(EXCEPTION_BITMAP, MAX_UINT64);
 	DebugPrint0402("SetupVmcs[%d]: EPTP=0x%p, MsrBitmap=0x%p, ExceptionBitmap=0x%p\n",
 		Cpu->Index, g_VmState.AddressSpace.Eptp.All, (UINT64)&Cpu->Data.MsrBitmap, (UINT64)MAX_UINT64);
+
+	__vmx_vmwrite(IO_BITMAP_A_ADDR_FULL, (UINT64)&Cpu->Data.IoBitmapA);
+	__vmx_vmwrite(IO_BITMAP_B_ADDR_FULL, (UINT64)&Cpu->Data.IoBitmapB);
+
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x20);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x21);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA0);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA1);
+
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x3F8);
 
 	//
 	// Initialize host.
@@ -536,6 +713,8 @@ SetupVmcs(
 	__vmx_vmwrite(GUEST_IA32_SYSENTER_CS, 0x38);
 	__vmx_vmwrite(GUEST_IA32_SYSENTER_EIP, 0);
 	__vmx_vmwrite(GUEST_IA32_SYSENTER_ESP, 0);
+
+	__vmx_vmwrite(GUEST_IA32_EFER_FULL, __readmsr(IA32_EFER));
 
 	__vmx_vmwrite(GUEST_LINK_PTR_FULL, MAX_UINT64);
 

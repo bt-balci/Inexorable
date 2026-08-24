@@ -27,7 +27,7 @@ DebugPrint0402(
     VA_END(Marker);
 
     for (Index = 0; Index < CharCount; Index++) {
-        __outb(0x402, (UINT8)Buffer[Index]);
+        __outb(QEMU_DEBUG_PORT, (UINT8)Buffer[Index]);
     }
 
     return CharCount;

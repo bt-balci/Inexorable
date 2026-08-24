@@ -82,8 +82,8 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <MASM Include="Boot.asm">
+    <NASM Include="Boot.asm">
       <Filter>Source Files</Filter>
-    </MASM>
+    </NASM>
   </ItemGroup>
 </Project>

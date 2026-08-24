@@ -58,6 +58,23 @@
 ////				Structs				   ////
 ///////////////////////////////////////////////
 
+typedef struct {
+	CHAR8 Sign[5];
+	UINTN Pages;
+	UINTN Size;
+} POOL_HEADER;
+
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 Vector : 8;
+		UINT32 Type : 3;
+		UINT32 DeliverErrorCode : 1;
+		UINT32 Reserved : 19;
+		UINT32 Valid : 1;
+	};
+} VMX_INTERRUPTION_INFORMATION;
+
 /*
 	Structure representing each virtual processor.
 */
@@ -75,17 +92,18 @@ typedef struct {
 
 	struct {
 		UINT8 MsrBitmap[0x1000];
+		UINT8 IoBitmapA[0x1000];
+		UINT8 IoBitmapB[0x1000];
 		UINT8 HostStack[HOST_STACK_SIZE];
 	} __attribute__((aligned(4096))) Data;
 
+	struct {
+		VMX_INTERRUPTION_INFORMATION PendingInterrupt;
+		BOOLEAN HasPendingInterrupt;
+	} Hardware;
+
 	UINT32 Index;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_CPU;
-
-typedef struct {
-	CHAR8 Sign[5];
-	UINTN Pages;
-	UINTN Size;
-} POOL_HEADER;
 
 typedef struct {
 	struct {
@@ -157,16 +175,7 @@ typedef struct {
 	} Firmware;
 } __attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE;
 
-typedef union {
-	UINT32 All;
-	struct {
-		UINT32 Vector : 8;
-		UINT32 Type : 3;
-		UINT32 DeliverErrorCode : 1;
-		UINT32 Reserved : 19;
-		UINT32 Valid : 1;
-	};
-} VMX_INTERRUPTION_INFORMATION;
+
 
 typedef union {
 	UINT32 All;
@@ -195,6 +204,19 @@ typedef union {
 		UINT32 TranslationBork : 1;
 	};
 } VMX_EPT_VIOLATION_QUAILIFICATION;
+
+typedef union {
+	UINT32 All;
+	struct {
+		UINT32 SizeOfAccess : 3;
+		UINT32 Direction : 1;
+		UINT32 String : 1;
+		UINT32 Rep : 1; 
+		UINT32 OperandEncoding : 1; 
+		UINT32 Reserved1 : 9;
+		UINT32 PortNumber : 16;
+	};
+} VMX_EXIT_QUALIFICATION_IO;
 
 ///////////////////////////////////////////////
 ////				Globals				   ////
@@ -593,6 +615,10 @@ typedef enum {
 #define VMEXIT_REASON_PML_FULL 62
 #define VMEXIT_REASON_XSAVES 63
 #define VMEXIT_REASON_XRSTORS 64
+
+
+
+#define SET_IO_PORT_BIT(bitmap, port) ((bitmap)[(port) / 8] |= (1 << ((port) % 8)))
 
 ///////////////////////////////////////////////
 ////				Methods				   ////
