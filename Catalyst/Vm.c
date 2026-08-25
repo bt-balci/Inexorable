@@ -430,6 +430,11 @@ VmExitHandler(
 
 		VMX_EXIT_QUALIFICATION_IO IoQualification = { .All = ExitQualification };
 
+		if (IoQualification.Direction == 0 && IoQualification.PortNumber == UART_COM1_PORT) {
+			__outb(UART_COM1_PORT, (UINT8)Cpu->Context.Rax);
+			break;
+		}
+
 		if (IoQualification.Direction == 0) {
 			DebugPrint0402("Guest wrote %d to port %d\n", Cpu->Context.Rax, IoQualification.PortNumber);
 		} else {
@@ -622,12 +627,12 @@ SetupVmcs(
 	__vmx_vmwrite(IO_BITMAP_A_ADDR_FULL, (UINT64)&Cpu->Data.IoBitmapA);
 	__vmx_vmwrite(IO_BITMAP_B_ADDR_FULL, (UINT64)&Cpu->Data.IoBitmapB);
 
-	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x20);
-	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x21);
-	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA0);
-	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA1);
+	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, PIC1_COMMAND);
+	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x21);
+	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, PIC2_COMMAND);
+	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA1);
 
-	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x3F8);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, UART_COM1_PORT);
 
 	//
 	// Initialize host.

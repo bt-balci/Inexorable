@@ -18,7 +18,7 @@
 #include "Boot.h"
 
 CONST UINT8 Kernel[] = {
-#embed "../workhorse.elf"
+#embed "../WorkhorseRT-main/build/workhorse.elf"
 };
 
 CHAR8* gEfiCallerBaseName = "BT-BALCI";

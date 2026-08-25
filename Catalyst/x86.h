@@ -58,6 +58,7 @@
 #define RFLAGS_IF			0x200
 
 #define QEMU_DEBUG_PORT		0x402
+#define UART_COM1_PORT		0x3F8
 
 ///////////////////////////////////////////////
 ////				Enums				   ////

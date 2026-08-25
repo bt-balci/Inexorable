@@ -114,6 +114,8 @@ void __ia32eUartTransmitStr(uint16_t com_port, const char *str)
 inline 
 int __ia32eUartInit(uint16_t com_port)
 {
+	return 0;
+	
     __ia32eOutb(com_port + IA32E_UART_INT_ENABLE_OFFSET_RW, 0x0);
 
     /* Set the baud rate */
