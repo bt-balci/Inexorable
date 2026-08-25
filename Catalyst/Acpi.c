@@ -75,8 +75,10 @@ GenerateAcpiTables(
 	Rsdp->Signature = EFI_ACPI_6_1_ROOT_SYSTEM_DESCRIPTION_POINTER_SIGNATURE;
 	CopyMem(Rsdp->OemId, "BALCI ", 6);
 
-	Rsdp->RsdtAddress = 0; // No.
-
+	//
+	// Since guest has less than 4GB of ram, it is GUARANTEED that this pointer will fit for XSDT and RSDT since both are technically same.
+	//
+	Rsdp->RsdtAddress = XsdtPtr;
 	Rsdp->XsdtAddress = XsdtPtr;
 
 	Rsdp->Length = sizeof(*Rsdp);
@@ -97,8 +99,11 @@ GenerateAcpiTables(
 	XsdtHeader->Length = sizeof(*XsdtHeader);
 	XsdtHeader->Checksum = 0;
 
-	UINT64* XsdtEntries = (UINT64*)((UINT8*)XsdtHeader + XsdtHeader->Length);
-	XsdtEntries[0] = MadtPtr;
+	//
+	// Should be 64.
+	//
+	UINT32* XsdtEntries = (UINT32*)((UINT8*)XsdtHeader + XsdtHeader->Length);
+	XsdtEntries[0] = (UINT32)MadtPtr;
 
 	XsdtHeader->Length += 8;
 

@@ -23,6 +23,7 @@
  * SOFTWARE.
 */
 
+#include <export/kDbgInterface.h>
 #include <generated/autoconf.h>
 #include <ia32eUart.h>
 #include <ia32eCpu.h>
@@ -105,6 +106,8 @@ void ia32eMultiboot2Parser(void)
         ia32eEarlyKpanic("Failed to map mb2\n");
         UNREACHABLE();
     }
+	
+	kDbgStrf("Multiboot at 0x%p (Phys), 0x%p (Virt) with size %d\n", ia32eMultiboot2Ptr, mb2Ptr, mb2Size);
 
     global = ia32eGetGlobalPtr();
 
@@ -117,8 +120,10 @@ void ia32eMultiboot2Parser(void)
     mb2Ptr += MULTIBOOT_INFO_ALIGN;
     tag = (void *)mb2Ptr;
 
-    while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+	kDbgStrf("Ptr: 0x%p, Tag: %d, Size: %d\n", tag, tag->type, tag->size);
 
+    while (tag->type != MULTIBOOT_TAG_TYPE_END) {
+		kDbgStrf("Ptr: 0x%p, Tag: %d, Size: %d\n", tag, tag->type, tag->size);
         if (tag->type == MULTIBOOT_TAG_TYPE_ACPI_OLD) {
 
             oldAcpi = (void *)tag;

@@ -47,6 +47,12 @@ typedef struct {
 } MULTIBOOT2_HEADER_TAG_INFORMATION_REQUEST;
 
 typedef struct {
+    UINT32 Type;
+    UINT32 Size;
+    UINT8 Rsdp[0];
+} MULTIBOOT2_TAG_OLD_ACPI;
+
+typedef struct {
     UINT16 Type;
     UINT16 Flags;
     UINT32 Size;

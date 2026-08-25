@@ -45,7 +45,8 @@ global Multiboot2Boot
 
 ; void Multiboot2Boot(UINT64 EntryPoint [RCX], UINT64 MultibootInfo [RDX])
 Multiboot2Boot:
-	mov rbp, rcx            ; Save entry point
+	mov rbp, rcx	; Save entry point
+	mov rsi, rdx	; Save multiboot
 
 	cli
 
@@ -73,7 +74,7 @@ Compat32:
 
 	; Disable Paging (CR0.PG = 0)
 	mov eax, cr0
-	and eax, 0x7FFFFFFF
+	and eax, 7FFFFFFFh
 	mov cr0, eax
 
 	; Disable Long Mode (EFER.LME = 0)
@@ -85,8 +86,8 @@ Compat32:
 	; Multiboot2 magic number
 	mov eax, 36D76289h
 
-	; multiboot info (passed in RDX, but we only need lower 32 bits)
-	mov ebx, edx
+	; multiboot info (saved in RSI, but we only need lower 32 bits)
+	mov ebx, esi
 
 	; jump to the entry point (now in EBP because we saved RCX in RBP)
 	jmp ebp

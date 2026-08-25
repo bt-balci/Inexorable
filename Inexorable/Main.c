@@ -65,7 +65,6 @@ BootKernel(
 	UINT32 SectionsTotalSize = Header->Shnum * Header->Shentsize;
 	UINT32 ElfTagSize = sizeof(MULTIBOOT2_TAG_ELF_SECTIONS) + SectionsTotalSize;
 
-
 	ELF64_PHDR* Phdrs = (ELF64_PHDR*)((UINT8*)Kernel + Header->Phoff);
 	DebugPrint0402("[GUEST] Loading ELF: Phoff=0x%lx, Phnum=%lu, Entry=0x%lx\n",
 		Header->Phoff, Header->Phnum, Header->Entry);
@@ -156,7 +155,6 @@ BootKernel(
 	gBS.ExitBootServices(0, MapKey);
 
 	DebugPrint0402("[GUEST] Kernel dynamically mapped successfully\n");
-	DebugPrint0402("[GUEST] Dropping to Protected Mode because Multiboot2 demands so\n");
 
 	MULTIBOOT2_TAG_ELF_SECTIONS* ElfTag = (MULTIBOOT2_TAG_ELF_SECTIONS*)(MbiBuffer + CurrentOffset);
 	ElfTag->Type = MULTIBOOT_TAG_TYPE_ELF_SECTIONS;
@@ -165,18 +163,31 @@ BootKernel(
 	ElfTag->Entsize = Header->Shentsize;
 	ElfTag->Shndx = Header->Shstrndx;
 
+	DebugPrint0402("[GUEST] ElfTag at 0x%p, Type=0x%x, Size=%d, Num=%d, Entsize=%d, Shndx=%d\n",
+		ElfTag, ElfTag->Type, ElfTag->Size, ElfTag->Num, ElfTag->Entsize, ElfTag->Shndx);
+
 	UINT8* RawSections = (UINT8*)Kernel + Header->Shoff;
 	gBS.CopyMem(ElfTag->Sections, RawSections, SectionsTotalSize);
 
+	DebugPrint0402("[GUEST] Copied %d bytes of ELF sections from 0x%p to 0x%p\n",
+		SectionsTotalSize, RawSections, ElfTag->Sections);
+
 	CurrentOffset += ALIGN_UP_8(ElfTagSize);
+	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
 
 	MULTIBOOT2_TAG_MMAP* MmapTag = (MULTIBOOT2_TAG_MMAP*)(MbiBuffer + CurrentOffset);
 	MmapTag->Type = MULTIBOOT_TAG_TYPE_MMAP;
 	MmapTag->EntrySize = sizeof(MULTIBOOT_MMAP_ENTRY);
 	MmapTag->EntryVersion = 0;
 
+	DebugPrint0402("[GUEST] MmapTag at 0x%p, Type=0x%p, EntrySize=%d, EntryVersion=%d\n",
+		MmapTag, MmapTag->Type, MmapTag->EntrySize, MmapTag->EntryVersion);
+
 	UINT32 MmapEntryCount = 0;
 	UINTN NumEntries = MemoryMapSize / DescriptorSize;
+
+	DebugPrint0402("[GUEST] MemoryMapSize=%d, DescriptorSize=%d, NumEntries=%d\n",
+		MemoryMapSize, DescriptorSize, NumEntries);
 
 	for (UINTN i = 0; i < NumEntries; i++) {
 		EFI_MEMORY_DESCRIPTOR* Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Descriptors + (i * DescriptorSize));
@@ -198,22 +209,48 @@ BootKernel(
 		MmapTag->Entries[MmapEntryCount].Type = MbType;
 		MmapTag->Entries[MmapEntryCount].Zero = 0;
 
+		DebugPrint0402("[GUEST] MMAP[%d]: PhysStart=0x%p, Pages=%d, Length=0x%p, EFI_Type=%d -> MB_Type=%d\n",
+			i, Desc->PhysicalStart, Desc->NumberOfPages, Desc->NumberOfPages * 4096, Desc->Type, MbType);
+
 		MmapEntryCount++;
 	}
 
+	DebugPrint0402("[GUEST] Total MmapEntryCount = %d\n", MmapEntryCount);
+
 	UINT32 MmapTagSize = sizeof(MULTIBOOT2_TAG_MMAP) + (MmapEntryCount * sizeof(MULTIBOOT_MMAP_ENTRY));
 	MmapTag->Size = MmapTagSize;
+	DebugPrint0402("[GUEST] MmapTagSize = 0x%p\n", MmapTagSize);
 
 	CurrentOffset += ALIGN_UP_8(MmapTagSize);
+	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
+
+	MULTIBOOT2_TAG_OLD_ACPI* AcpiTag = (MULTIBOOT2_TAG_OLD_ACPI*)(MbiBuffer + CurrentOffset);
+	AcpiTag->Type = MULTIBOOT_TAG_TYPE_ACPI_OLD;
+	AcpiTag->Size = sizeof(*AcpiTag) + 36;
+	CopyMem((VOID**)&AcpiTag->Rsdp, (VOID*)ACPI_RSDP_BASE, 36);
+
+	DebugPrint0402("[GUEST] AcpiTag at 0x%p, Type=0x%p, Size=%d, Rsdp=0x%p\n",
+		AcpiTag, AcpiTag->Type, AcpiTag->Size, AcpiTag->Rsdp);
+
+	CurrentOffset += (ALIGN_UP_8(AcpiTag->Size));
+	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
 
 	MULTIBOOT2_INFO_TAG* EndTag = (MULTIBOOT2_INFO_TAG*)(MbiBuffer + CurrentOffset);
 	EndTag->Type = 0;
 	EndTag->Size = 8;
+
+	DebugPrint0402("[GUEST] EndTag at 0x%p, Type=0, Size=8\n", EndTag);
+
 	CurrentOffset += 8;
+	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
 
 	MULTIBOOT2_INFO* FinalMbi = (MULTIBOOT2_INFO*)MbiBuffer;
 	FinalMbi->TotalSize = CurrentOffset;
 	FinalMbi->Reserved = 0;
+
+	DebugPrint0402("[GUEST] Dropping to Protected Mode because Multiboot2 demands so\n");
+	DebugPrint0402("[GUEST] MbiBuffer = 0x%p, 0x%x\n", FinalMbi, FinalMbi->TotalSize);
+	DebugPrint0402("[GUEST] Booting to 0x%p with Multiboot2Info = 0x%p\n", Header->Entry, MbiBuffer);
 
 	Multiboot2Boot((VOID*)Header->Entry, FinalMbi);
 }

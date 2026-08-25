@@ -194,7 +194,7 @@ TranslateGuestPhysicalToHostPhysical(
 
 	UINT64 Result = (UINT64)(Pt->PhysicalAddress << 12) + Offset;
 
-	DebugPrint0402("TranslateGuestPhysicalToHostPhysical: GPA = 0x%p, translates to HPA = 0x%p. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", GuestPhysicalAddress, Result, Pml4Idx, PdptIdx, PdIdx, PtIdx);
+	//DebugPrint0402("TranslateGuestPhysicalToHostPhysical: GPA = 0x%p, translates to HPA = 0x%p. Pml4Idx = %d, PdptIdx = %d, PdIdx = %d, PtIdx = %d\n", GuestPhysicalAddress, Result, Pml4Idx, PdptIdx, PdIdx, PtIdx);
 
 	*HostPhysicalAddress = (VOID*)Result;
 
