@@ -553,6 +553,10 @@ typedef struct {
 
 #define IA32_EFER 0xC0000080
 
+#define IA32_FS_BASE		0xC0000100
+#define IA32_GS_BASE		0xC0000101
+#define IA32_KERNEL_GS_BASE 0xC0000102 
+
 
 #define IA32_APIC_BASE 0x1B
 #define APIC_BASE_ENABLE_X2APIC     (1ULL << 10)

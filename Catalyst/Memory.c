@@ -151,6 +151,69 @@ CopyToGuest(
 
 BOOLEAN
 EFIAPI
+GetGuestEptEntry(
+	IN UINT64		GuestPhysicalAddress,
+	OUT EPT_PML4**	Pml4					OPTIONAL,
+	OUT EPT_PDPTE**	Pdpt					OPTIONAL,
+	OUT EPT_PDE**	Pd						OPTIONAL,
+	OUT EPT_PTE**	Pt						OPTIONAL,
+	OUT UINT16*		Offset					OPTIONAL
+) {
+	UINT16 Pml4Idx = (GuestPhysicalAddress >> 39) & 0x1FF;
+	UINT16 PdptIdx = (GuestPhysicalAddress >> 30) & 0x1FF;
+	UINT16 PdIdx = (GuestPhysicalAddress >> 21) & 0x1FF;
+	UINT16 PtIdx = (GuestPhysicalAddress >> 12) & 0x1FF;
+	UINT16 Offsetx = (GuestPhysicalAddress) & 0xFFF;
+
+	if (Offset)
+		*Offset = Offsetx;
+
+	EPT_PML4* Epml4 = &g_VmState.AddressSpace.Epml4[Pml4Idx];
+	if (!Epml4->Present) {
+		DebugPrint0402("TranslateGuestPhysicalToHostPhysical: TranslateGPA->HPA: GPA=0x%p FAIL at PML4[%d] — not present\n", GuestPhysicalAddress, Pml4Idx);
+		return FALSE;
+	}
+
+	if (Pml4)
+		*Pml4 = Epml4;
+
+	EPT_PDPTE* Epdpt = &(((EPT_PDPTE*)(Epml4->PhysicalAddress << 12))[PdptIdx]);
+	if (!Epdpt->Present) {
+		DebugPrint0402("TranslateGuestPhysicalToHostPhysical: TranslateGPA->HPA: GPA=0x%p FAIL at PDPTE[%d] — not present\n", GuestPhysicalAddress, PdptIdx);
+		return FALSE;
+	}
+
+	if (Pdpt)
+		*Pdpt = Epdpt;
+
+	EPT_PDE* Epd = &(((EPT_PDE*)(Epdpt->PhysicalAddress << 12))[PdIdx]);
+	if (!Epd->Present) {
+		DebugPrint0402("TranslateGuestPhysicalToHostPhysical: TranslateGPA->HPA: GPA=0x%p FAIL at PDE[%d] — not present\n", GuestPhysicalAddress, PdIdx);
+		return FALSE;
+	}
+
+	if (Pd)
+		*Pd = Epd;
+
+	/*
+	if (Pd->Large)
+		return (VOID*)(UINT64)(Pd->PhysicalAddress << 21);
+	*/
+
+	EPT_PTE* Ept = &(((EPT_PTE*)(((EPT_PDE*)Epd)->PhysicalAddress << 12))[PtIdx]);
+	if (!Ept->Present) {
+		DebugPrint0402("TTranslateGuestPhysicalToHostPhysical: ranslateGPA->HPA: GPA=0x%p FAIL at PTE[%d] — not present\n", GuestPhysicalAddress, PtIdx);
+		return FALSE;
+	}
+
+	if (Pt)
+		*Pt = Ept;
+
+	return TRUE;
+}
+
+BOOLEAN
+EFIAPI
 TranslateGuestPhysicalToHostPhysical(
 	IN UINT64   GuestPhysicalAddress,
 	OUT VOID**	HostPhysicalAddress

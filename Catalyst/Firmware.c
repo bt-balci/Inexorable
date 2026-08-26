@@ -512,8 +512,8 @@ GuestFindFreePages(
 	UINT64 MaxAddrPage = 0;
 	UINT64 Start = 0;
 
-	DebugPrint0402("GuestFindFreePages: Type=%d, Pages=%d, HintIn=0x%p, TotalPages=%d, NextHint=%d\n",
-		AllocationType, Pages, *OutPageBase, g_VmState.Firmware.Memory.TotalPages, g_VmState.Firmware.Memory.NextFreeHint);
+	//DebugPrint0402("GuestFindFreePages: Type=%d, Pages=%d, HintIn=0x%p, TotalPages=%d, NextHint=%d\n",
+		//AllocationType, Pages, *OutPageBase, g_VmState.Firmware.Memory.TotalPages, g_VmState.Firmware.Memory.NextFreeHint);
 
 	if (AllocationType == AllocateAddress) {
 		//
@@ -543,8 +543,8 @@ GuestFindFreePages(
 		}
 		*OutPageBase = Start << EFI_PAGE_SHIFT;
 
-		DebugPrint0402("GuestFindFreePages (AllocateAddress): SUCCESS, GPA base=0x%p until=0x%p (pages %d..%d)\n",
-			*OutPageBase, *OutPageBase + (Pages << EFI_PAGE_SHIFT), Start, End);
+		//DebugPrint0402("GuestFindFreePages (AllocateAddress): SUCCESS, GPA base=0x%p until=0x%p (pages %d..%d)\n",
+			//*OutPageBase, *OutPageBase + (Pages << EFI_PAGE_SHIFT), Start, End);
 		return EFI_SUCCESS;
 	}
 	else if (AllocationType == AllocateMaxAddress) {
@@ -624,10 +624,10 @@ GuestFindFreePages(
 				g_VmState.Firmware.Memory.NextFreeHint = Base + Pages;
 				*OutPageBase = Base << EFI_PAGE_SHIFT;
 
-				DebugPrint0402("GuestFindFreePages: SUCCESS, GPA base=0x%p until=0x%p, HPA base=0x%p until=0x%p, NextHint=%d\n",
-					*OutPageBase, *OutPageBase + (Pages << EFI_PAGE_SHIFT),
-					HostAddress, (VOID*)((UINTN)HostAddress + (Pages << EFI_PAGE_SHIFT)),
-					g_VmState.Firmware.Memory.NextFreeHint);
+				//DebugPrint0402("GuestFindFreePages: SUCCESS, GPA base=0x%p until=0x%p, HPA base=0x%p until=0x%p, NextHint=%d\n",
+					//*OutPageBase, *OutPageBase + (Pages << EFI_PAGE_SHIFT),
+					//HostAddress, (VOID*)((UINTN)HostAddress + (Pages << EFI_PAGE_SHIFT)),
+					//g_VmState.Firmware.Memory.NextFreeHint);
 				return EFI_SUCCESS;
 			}
 		}

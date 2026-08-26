@@ -120,10 +120,7 @@ void ia32eMultiboot2Parser(void)
     mb2Ptr += MULTIBOOT_INFO_ALIGN;
     tag = (void *)mb2Ptr;
 
-	kDbgStrf("Ptr: 0x%p, Tag: %d, Size: %d\n", tag, tag->type, tag->size);
-
     while (tag->type != MULTIBOOT_TAG_TYPE_END) {
-		kDbgStrf("Ptr: 0x%p, Tag: %d, Size: %d\n", tag, tag->type, tag->size);
         if (tag->type == MULTIBOOT_TAG_TYPE_ACPI_OLD) {
 
             oldAcpi = (void *)tag;
@@ -201,8 +198,12 @@ void ia32eRsdtParser(void)
     ia32eVmaEarlyRemapPg(dummyPage, rsdtPhysPgBase, false);
     rsdt = (void *)(dummyPage + rsdtOffset);
 
+	kDbgStrf("Rsdt Physical: 0x%p, Virtual: 0x%p\n", rsdtPhys, rsdt);
+
     rsdtSize = rsdt->hdr.length;
     numEntries = (rsdtSize - sizeof(acpiSdtHdr_t)) / sizeof(uint32_t);
+
+	kDbgStrf("Rsdt Size: 0x%p, Entries: %d\n", rsdtSize, numEntries);
 
     rsdt = ia32eVmaEarlyMapRange(rsdtPhys, rsdtSize, false);
     if (!rsdt) {
@@ -216,23 +217,28 @@ void ia32eRsdtParser(void)
         hdrPhysPgBase = hdrPhys & ~(IA32E_PAGE_SIZE_2MB - 1);
         hdrOffset = hdrPhys - hdrPhysPgBase;
 
+		//kDbgStrf("Header Physical: 0x%p, Header Physical Base: 0x%p, Header Offset 0x%p, Remap Virtual: 0x%p\n",
+			//hdrPhys, hdrPhysPgBase, hdrOffset, dummyPage);
+
         ia32eVmaEarlyRemapPg(dummyPage, hdrPhysPgBase, false);
 
         hdr = (void *)(dummyPage + hdrOffset);
         hdrSize = hdr->length;
         hdrSig = ACPI_SIG32(hdr->signature);
 
+		kDbgStrf("Header (0x%p) at virtual 0x%p with size %d\n", hdrSig, hdr, hdrSize);
+
         switch (hdrSig) {
 
             case ACPI_MADT_SIGNATURE_UINT32:
-
+				kDbgStrf("MADT found\n");
                 madtFound = true;
                 madtSize = hdrSize;
                 madtPhys = hdrPhys;
                 break;
 
             case ACPI_FADT_SIGNATURE_UINT32:
-
+				kDbgStrf("FADT found\n");
                 fadtFound = true;
                 fadtSize = hdrSize;
                 fadtPhys = hdrPhys;                
@@ -268,7 +274,7 @@ void ia32eRsdtParser(void)
      
         fadt = ia32eVmaEarlyMapRange(fadtPhys, fadtSize, false);
         if (fadt) {
-
+			kDbgStrf("FADT Physical: 0x%p, Virtual: 0x%p, Size: 0x%p\n", fadtPhys, fadt, fadtSize);
             acpiFadt = fadt;
             if (acpiFadt->pmTmrLen == 4) {
 
@@ -296,7 +302,9 @@ void ia32eRsdtParser(void)
                 }
                 
                 global->acpiPm.found = acpiPm;
-            }
+            } else {
+				kDbgStrf("pmTmrLen was %d\n", acpiFadt->pmTmrLen);
+			}
         }
     }
 

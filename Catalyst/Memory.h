@@ -58,6 +58,17 @@ StrLenFromGuest(
 
 BOOLEAN
 EFIAPI
+GetGuestEptEntry(
+	IN UINT64		GuestPhysicalAddress,
+	OUT EPT_PML4** Pml4					OPTIONAL,
+	OUT EPT_PDPTE** Pdpt					OPTIONAL,
+	OUT EPT_PDE** Pd						OPTIONAL,
+	OUT EPT_PTE** Pt						OPTIONAL,
+	OUT UINT16* Offset					OPTIONAL
+);
+
+BOOLEAN
+EFIAPI
 TranslateGuestPhysicalToHostPhysical(
 	IN UINT64	GuestPhysicalAddress,
 	OUT VOID**	HostPhysicalAddress

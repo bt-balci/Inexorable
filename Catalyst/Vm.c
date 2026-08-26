@@ -232,6 +232,14 @@ VmExitHandler(
 	//
 	ExitReason &= 0xFFFF;
 
+	if (ExitReason == VMEXIT_REASON_IO_INSTRUCTION) {
+		//
+		// Completely skip.
+		//
+		__vmx_vmwrite(GUEST_RIP, Cpu->Context.Rip + ExitInstructionLen);
+		return;
+	}
+
 	DebugPrint0402("VMEXIT[%d]: Reason = %d (0x%x), Qualification = 0x%p, ExitInstructionLen = %d, GuestRip = 0x%p, GuestRsp = 0x%p, GuestCr3 = 0x%p\n",
 		Cpu->Index, ExitReason, ExitReason, ExitQualification, ExitInstructionLen,
 		Cpu->Context.Rip, Cpu->Context.Rsp, Cpu->ExtendedContext.Cr3.All);
@@ -239,7 +247,10 @@ VmExitHandler(
 	BOOLEAN Borked = FALSE;
 
 	switch (ExitReason) {
-
+	case VMEXIT_REASON_CPUID:
+		DebugPrint0402("Guest CPUID\n");
+		AsmCpuid(Cpu->Context.Rax, (UINT32*)&Cpu->Context.Rax, (UINT32*)&Cpu->Context.Rbx, (UINT32*)&Cpu->Context.Rcx, (UINT32*)&Cpu->Context.Rdx);
+		break;
 	case VMEXIT_REASON_VMENTRY_FAILURE_DUE_TO_GUEST_STATE:
 		DebugPrint0402("VMCS is borked\n");
 		Borked = TRUE;
@@ -281,14 +292,26 @@ VmExitHandler(
 
 	case VMEXIT_REASON_EPT_VIOLATION: {
 		VMX_EPT_VIOLATION_QUAILIFICATION EptQualification = { .All = (UINT32)ExitQualification };
+		UINT64 Gpa = 0;
+		__vmx_vmread(READONLY_GUEST_PHYSICAL_ADDR_FULL, &Gpa);
 
-		DebugPrint0402("EPT Violation. Read = %d, Write = %d, Execute = %d, "
+		DebugPrint0402("EPT Violation (0x%p). Read = %d, Write = %d, Execute = %d, "
 			"IsReadable = %d, IsWritable = %d, IsExecutable = %d, "
 			"UserExecute = %d, GuestLinearAddressValid = %d, TranslationBork = %d\n",
+			Gpa,
 			EptQualification.Read, EptQualification.Write, EptQualification.Execute,
 			EptQualification.IsReadable, EptQualification.IsWritable, EptQualification.IsExecutable,
 			EptQualification.UserExecute, EptQualification.GuestLinearAddressValid,
 			EptQualification.TranslationBork);
+
+		EPT_PTE* Pte = NULL;
+		if (!GetGuestEptEntry(Gpa, NULL, NULL, NULL, &Pte, NULL)) {
+			DebugPrint0402("EPT entry does not exist\n");
+		}
+		else {
+			DebugPrint0402("EPT PTE: Present = %d, Read = %d, Write = %d, Execute = %d, ExecuteUser = %d\n",
+				Pte->Present, Pte->Read, Pte->Write, Pte->Execute, Pte->ExecuteUser);
+		}
 
 		Borked = TRUE;
 		break;
@@ -297,10 +320,19 @@ VmExitHandler(
 	case VMEXIT_REASON_WRMSR: {
 		UINT64 MsrValue = ((Cpu->Context.Rdx & 0xFFFFFFFF) << 32) | (Cpu->Context.Rax & 0xFFFFFFFF);
 		UINT64 Msr = Cpu->Context.Rcx;
-		DebugPrint0402("Guest writes 0x%p to 0x%p\n", MsrValue, Msr);
+		DebugPrint0402("Guest writes 0x%p to MSR 0x%p\n", MsrValue, Msr);
 		if (Msr == IA32_EFER) {
 			DebugPrint0402("Passthrough EFER...\n");
 			__vmx_vmwrite(GUEST_IA32_EFER_FULL, MsrValue);
+		}
+		else if (Msr == IA32_GS_BASE) {
+			__vmx_vmwrite(GUEST_GS_BASE, MsrValue);
+		}
+		else if (Msr == IA32_FS_BASE) {
+			__vmx_vmwrite(GUEST_FS_BASE, MsrValue);
+		}
+		else if (Msr == IA32_KERNEL_GS_BASE) {
+			DebugPrint0402("UH oh\n", Msr, MsrValue);
 		}
 		else {
 			__writemsr(Msr, MsrValue);
@@ -313,11 +345,20 @@ VmExitHandler(
 		if (Msr == IA32_EFER) {
 			__vmx_vmread(GUEST_IA32_EFER_FULL, &MsrValue);
 		}
+		else if (Msr == IA32_GS_BASE) {
+			__vmx_vmread(GUEST_GS_BASE, &MsrValue);
+		}
+		else if (Msr == IA32_FS_BASE) {
+			__vmx_vmread(GUEST_FS_BASE, &MsrValue);
+		}
+		else if (Msr == IA32_KERNEL_GS_BASE) {
+			DebugPrint0402("UH oh\n", Msr, MsrValue);
+		}
 		else {
 			MsrValue = __readmsr(Msr);
 		}
 
-		DebugPrint0402("Guest reads 0x%p as 0x%p\n", Msr, MsrValue);
+		DebugPrint0402("Guest reads MSR 0x%p as 0x%p\n", Msr, MsrValue);
 
 		Cpu->Context.Rdx = (UINT32)(MsrValue >> 32);
 		Cpu->Context.Rax = (UINT32)MsrValue;
