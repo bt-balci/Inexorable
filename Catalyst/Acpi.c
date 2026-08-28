@@ -187,9 +187,9 @@ GenerateAcpiTables(
 	//
 	// Should be 64.
 	//
-	UINT32* XsdtEntries = (UINT32*)((UINT8*)XsdtHeader + sizeof(*XsdtHeader));
-	XsdtEntries[0] = (UINT32)MadtPtr;
-	XsdtEntries[1] = (UINT32)FadtPtr;
+	UINT64* XsdtEntries = (UINT64*)((UINT8*)XsdtHeader + sizeof(*XsdtHeader));
+	XsdtEntries[0] = (UINT64)MadtPtr;
+	XsdtEntries[1] = (UINT64)FadtPtr;
 
 	XsdtHeader->Length += (8 * 2) + sizeof(*XsdtHeader);
 

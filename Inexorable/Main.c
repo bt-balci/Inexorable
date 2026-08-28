@@ -224,9 +224,9 @@ BootKernel(
 	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
 
 	MULTIBOOT2_TAG_OLD_ACPI* AcpiTag = (MULTIBOOT2_TAG_OLD_ACPI*)(MbiBuffer + CurrentOffset);
-	AcpiTag->Type = MULTIBOOT_TAG_TYPE_ACPI_OLD;
+	AcpiTag->Type = MULTIBOOT_TAG_TYPE_ACPI_NEW;
 	AcpiTag->Size = sizeof(*AcpiTag) + 36;
-	CopyMem((VOID**)&AcpiTag->Rsdp, (VOID*)ACPI_RSDP_BASE, 36);
+	AcpiTag->Rsdp = (VOID*)ACPI_RSDP_BASE;
 
 	DebugPrint0402("[GUEST] AcpiTag at 0x%p, Type=0x%p, Size=%d, Rsdp=0x%p\n",
 		AcpiTag, AcpiTag->Type, AcpiTag->Size, AcpiTag->Rsdp);

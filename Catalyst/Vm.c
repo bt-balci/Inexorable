@@ -627,7 +627,16 @@ AdjustVmcsControl(
 	UINT32 Allowed0 = (UINT32)Capabilities;
 	UINT32 Allowed1 = (UINT32)(Capabilities >> 32);
 
-	return (RequestedValue | Allowed0) & Allowed1;
+	UINT64 EffectiveValue = (RequestedValue | Allowed0) & Allowed1;
+	UINT64 IgnoredMask = (~Allowed1) | Allowed0;
+	UINT64 IgnoredRequestBits = RequestedValue & IgnoredMask;
+
+	if (EffectiveValue != RequestedValue) {
+		DebugPrint0402("AdjustVmcsControl: WARNING - Requested Value = 0x%p and Effective Value 0x%p is NOT same. Ignored Request Bits = 0x%p\n",
+			RequestedValue, EffectiveValue, IgnoredRequestBits);
+	}
+
+	return EffectiveValue;
 }
 
 VOID
@@ -659,7 +668,7 @@ SetupVmcs(
 	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, PinBasedExternalInterruptExiting));
 
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUncondIoExiting | ProcessorBasedHltExiting)));
+		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseIoBitmaps | ProcessorBasedHltExiting)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt
 			| ProcessorBased2UnrestrictedGuest)));
@@ -673,12 +682,12 @@ SetupVmcs(
 	__vmx_vmwrite(IO_BITMAP_A_ADDR_FULL, (UINT64)&Cpu->Data.IoBitmapA);
 	__vmx_vmwrite(IO_BITMAP_B_ADDR_FULL, (UINT64)&Cpu->Data.IoBitmapB);
 
-	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, PIC1_COMMAND);
-	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x21);
-	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, PIC2_COMMAND);
-	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA1);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, PIC1_COMMAND);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0x21);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, PIC2_COMMAND);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA1);
 
-	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, UART_COM1_PORT);
+	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, UART_COM1_PORT);
 
 	//
 	// Initialize host.

@@ -49,7 +49,7 @@ typedef struct {
 typedef struct {
     UINT32 Type;
     UINT32 Size;
-    UINT8 Rsdp[0];
+    VOID* Rsdp;
 } MULTIBOOT2_TAG_OLD_ACPI;
 
 typedef struct {

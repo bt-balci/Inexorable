@@ -1,5 +1,7 @@
 #include <stdint.h>
-#define COM1 0x3F8U
+#include <stdarg.h>
+
+#define COM1 0x402
 
 static inline void outb(uint16_t port, uint8_t value)
 {
@@ -13,28 +15,108 @@ static void serial_putc(char c)
 
 static void serial_write(const char *str)
 {
-    for (uint32_t i = 0; str[i] != 0; i++
-        serial_putc(str[i]]);
+    for (uint32_t i = 0; str[i] != 0; i++)
+        serial_putc(str[i]);
 }
 
-static void serial_hex8(uint8_t value)
+static void serial_putn(uint32_t value, int base, int width, char pad)
 {
-    static const char d[] = "0123456789ABCDEF";
-    char b[3] = { d[(value >> 4) & 0xF], d[value & 0xF], '\0' };
-    serial_write(b);
-}
+    char buffer[32];
+    int i = 0;
 
-static void serial_hex32(uint32_t value)
-{
-    static const char d[] = "0123456789ABCDEF";
-    char b[9];
-    int i;
-    for (i = 7; i >= 0; i--) {
-        b[i] = d[value & 0xF];
-        value >>= 4;
+    if (value == 0) {
+        buffer[i++] = '0';
+    } else {
+        while (value > 0) {
+            int digit = value % base;
+            buffer[i++] = (digit < 10) ? '0' + digit : 'A' + digit - 10;
+            value /= base;
+        }
     }
-    b[8] = '\0';
-    serial_write(b);
+
+    while (i < width) {
+        serial_putc(pad);
+        width--;
+    }
+
+    while (i > 0)
+        serial_putc(buffer[--i]);
+}
+
+static void serial_printf(const char *fmt, ...)
+{
+    va_list args;
+    va_start(args, fmt);
+
+    for (const char *p = fmt; *p; p++) {
+        if (*p != '%') {
+            serial_putc(*p);
+            continue;
+        }
+
+        if (*(p + 1) == '%') {
+            serial_putc('%');
+            p++;
+            continue;
+        }
+
+        int width = 0;
+        while (*(p + 1) >= '0' && *(p + 1) <= '9') {
+            width = width * 10 + (*(p + 1) - '0');
+            p++;
+        }
+
+        p++;
+
+        switch (*p) {
+            case 's': {
+                char *s = va_arg(args, char*);
+                serial_write(s ? s : "(null)");
+                break;
+            }
+            case 'c': {
+                int c = va_arg(args, int);
+                serial_putc((char)c);
+                break;
+            }
+            case 'd':
+            case 'i': {
+                int d = va_arg(args, int);
+                if (d < 0) {
+                    serial_putc('-');
+                    d = -d;
+                }
+                serial_putn((uint32_t)d, 10, width, '0');
+                break;
+            }
+            case 'u': {
+                unsigned int u = va_arg(args, unsigned int);
+                serial_putn(u, 10, width, '0');
+                break;
+            }
+            case 'x':
+            case 'X': {
+                unsigned int x = va_arg(args, unsigned int);
+                serial_putn(x, 16, width, '0');
+                break;
+            }
+            case 'p': {
+                void *ptr = va_arg(args, void*);
+                serial_write("0x");
+                int digits = 2 * sizeof(uintptr_t);
+                serial_putn((uintptr_t)ptr, 16, digits, '0');
+                break;
+            }
+            default:
+                serial_putc('%');
+                if (width > 0)
+                    serial_putn((uint32_t)width, 10, 0, '0');
+                serial_putc(*p);
+                break;
+        }
+    }
+
+    va_end(args);
 }
 
 typedef struct {
@@ -81,6 +163,12 @@ typedef struct {
     uint8_t entries[];
 } __attribute__((packed)) acpi_madt;
 
+static void print_oem_id(const uint8_t *oem_id)
+{
+    for (int i = 0; i < 6; i++)
+        serial_putc((char)oem_id[i]);
+}
+
 static uintptr_t find_rsdp(uintptr_t mb_info)
 {
     uintptr_t end = mb_info + *(uint32_t *)mb_info;
@@ -90,10 +178,12 @@ static uintptr_t find_rsdp(uintptr_t mb_info)
         multiboot_tag *tag = (multiboot_tag *)pos;
         if (tag->type == 0)
             break;
+
         if (tag->type == 14)
             return *(uint32_t *)(pos + 8);
         if (tag->type == 15)
             return (uintptr_t)*(uint64_t *)(pos + 8);
+
         pos = (pos + tag->size + 7) & ~(uintptr_t)7;
     }
     return 0;
@@ -102,8 +192,7 @@ static uintptr_t find_rsdp(uintptr_t mb_info)
 static uintptr_t find_madt(uintptr_t rsdp_addr)
 {
     acpi_rsdp *rsdp = (acpi_rsdp *)rsdp_addr;
-    int count;
-    int i;
+    int count, i;
 
     if (rsdp->revision >= 2 && rsdp->xsdt_address) {
         acpi_xsdt *xsdt = (acpi_xsdt *)(uintptr_t)rsdp->xsdt_address;
@@ -129,58 +218,53 @@ static uintptr_t find_madt(uintptr_t rsdp_addr)
     return 0;
 }
 
-static void print_oem_id(uint8_t *id)
-{
-    int i;
-    for (i = 0; i < 6; i++)
-        serial_putc(id[i]);
-}
-
 void kernel_main(uint32_t multiboot_magic, uint32_t multiboot_info)
 {
-    uintptr_t rsdp_addr;
-    uintptr_t madt_addr;
-    uintptr_t pos;
-    uintptr_t end;
+    uintptr_t rsdp_addr, madt_addr;
+    uintptr_t pos, end;
 
     (void)multiboot_magic;
 
-    serial_write("Hello World\n");
-
     rsdp_addr = find_rsdp((uintptr_t)multiboot_info);
+
+    serial_printf("RSDP found at %p\n", (void*)rsdp_addr);
+
     if (rsdp_addr) {
         acpi_rsdp *rsdp = (acpi_rsdp *)rsdp_addr;
-        serial_write("RSDP OEM ID: ");
+        serial_printf("RSDP OEM ID: ");
         print_oem_id(rsdp->oem_id);
-        serial_write("\n");
+        serial_printf("\n");
 
         madt_addr = find_madt(rsdp_addr);
+
+        serial_printf("MADT found at %p\n", (void*)madt_addr);
+
         if (madt_addr) {
             acpi_madt *madt = (acpi_madt *)madt_addr;
-            serial_write("MADT OEM ID: ");
+            serial_printf("MADT OEM ID: ");
             print_oem_id(madt->header.oem_id);
-            serial_write("\n");
+            serial_printf("\n");
 
             pos = (uintptr_t)madt->entries;
             end = madt_addr + madt->header.length;
+
             while (pos + 2 <= end) {
                 uint8_t type = *(uint8_t *)pos;
-                uint8_t len = *(uint8_t *)(pos + 1);
+                uint8_t len  = *(uint8_t *)(pos + 1);
                 if (len < 2)
                     break;
+
                 if (type == 0) {
-                    serial_write("LAPIC UID=");
-                    serial_hex8(*(uint8_t *)(pos + 2));
-                    serial_write(" APICID=");
-                    serial_hex8(*(uint8_t *)(pos + 3));
-                    serial_write("\n");
-                } else if (type == 9) {
-                    serial_write("x2APIC UID=");
-                    serial_hex32(*(uint32_t *)(pos + 4));
-                    serial_write(" APICID=");
-                    serial_hex32(*(uint32_t *)(pos + 8));
-                    serial_write("\n");
+                    uint8_t uid     = *(uint8_t *)(pos + 2);
+                    uint8_t apic_id = *(uint8_t *)(pos + 3);
+                    serial_printf("LAPIC UID=%u APICID=%u\n", uid, apic_id);
                 }
+                else if (type == 9) {
+                    uint32_t x2apic_id = *(uint32_t *)(pos + 4);
+                    uint32_t acpi_id   = *(uint32_t *)(pos + 8);
+                    serial_printf("x2APIC UID=%u APICID=%u\n", acpi_id, x2apic_id);
+                }
+
                 pos += len;
             }
         }
