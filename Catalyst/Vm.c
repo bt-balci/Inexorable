@@ -320,7 +320,9 @@ VmExitHandler(
 	case VMEXIT_REASON_WRMSR: {
 		UINT64 MsrValue = ((Cpu->Context.Rdx & 0xFFFFFFFF) << 32) | (Cpu->Context.Rax & 0xFFFFFFFF);
 		UINT64 Msr = Cpu->Context.Rcx;
+
 		DebugPrint0402("Guest writes 0x%p to MSR 0x%p\n", MsrValue, Msr);
+
 		if (Msr == IA32_EFER) {
 			DebugPrint0402("Passthrough EFER...\n");
 			__vmx_vmwrite(GUEST_IA32_EFER_FULL, MsrValue);
@@ -342,6 +344,7 @@ VmExitHandler(
 	case VMEXIT_REASON_RDMSR: {
 		UINT64 Msr = Cpu->Context.Rcx;
 		UINT64 MsrValue = 0;
+
 		if (Msr == IA32_EFER) {
 			__vmx_vmread(GUEST_IA32_EFER_FULL, &MsrValue);
 		}
@@ -543,8 +546,10 @@ VmExitHandler(
 	}
 	case VMEXIT_REASON_INTERRUPT_WINDOW: {
 		DebugPrint0402("Guest enabled RFLAGS.IF. Injecting pending interrupt...\n");
+
 		UINT64 PrimaryControl = 0;
 		__vmx_vmread(PRIMARY_PROCBASED_EXEC_CONTROLS, &PrimaryControl);
+
 		PrimaryControl &= ~ProcessorBasedInterruptWindowExiting;
 		__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, PrimaryControl);
 
@@ -654,7 +659,7 @@ SetupVmcs(
 	__vmx_vmwrite(PINBASED_EXEC_CONTROLS, AdjustVmcsControl(PINBASED_EXEC_CONTROLS, PinBasedExternalInterruptExiting));
 
 	__vmx_vmwrite(PRIMARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(PRIMARY_PROCBASED_EXEC_CONTROLS,
-		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUseIoBitmaps)));
+		(UINT64)(ProcessorBasedSecondaryControls | ProcessorBasedUncondIoExiting | ProcessorBasedHltExiting)));
 	__vmx_vmwrite(SECONDARY_PROCBASED_EXEC_CONTROLS, AdjustVmcsControl(SECONDARY_PROCBASED_EXEC_CONTROLS,
 		(UINT64)(ProcessorBased2EnableRdtscp | ProcessorBased2EnableUserWaitPause | ProcessorBased2EnableXsavesXrstors | ProcessorBased2EnableInvpcid | ProcessorBased2EnableEpt
 			| ProcessorBased2UnrestrictedGuest)));
@@ -673,7 +678,7 @@ SetupVmcs(
 	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, PIC2_COMMAND);
 	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, 0xA1);
 
-	SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, UART_COM1_PORT);
+	//SET_IO_PORT_BIT(Cpu->Data.IoBitmapA, UART_COM1_PORT);
 
 	//
 	// Initialize host.

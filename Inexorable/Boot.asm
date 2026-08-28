@@ -56,8 +56,9 @@ Multiboot2Boot:
 	sgdt [temp_gdtr]
 	mov rbx, [temp_gdtr + 2]
 
-	; limit=0xFFFF, base=0, access=0x9A, flags=0xCF
+	; Limit=0xFFFF, Base=0, Access=0x9A, Flags=0xCF
 	mov rax, 0x00CF9A000000FFFF
+	; Why? Apparently, I dont even know.
 	mov [rbx + 8], rax
 
 	; Far jump to 32‑bit compatibility mode

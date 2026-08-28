@@ -18,7 +18,7 @@
 #include "Boot.h"
 
 CONST UINT8 Kernel[] = {
-#embed "../WorkhorseRT-main/build/workhorse.elf"
+#embed "../Forge/kernel.bin"
 };
 
 CHAR8* gEfiCallerBaseName = "BT-BALCI";
@@ -61,9 +61,6 @@ BootKernel(
 		DebugPrint0402("[GUEST] Unsupported ELF file\n");
 		return;
 	}
-
-	UINT32 SectionsTotalSize = Header->Shnum * Header->Shentsize;
-	UINT32 ElfTagSize = sizeof(MULTIBOOT2_TAG_ELF_SECTIONS) + SectionsTotalSize;
 
 	ELF64_PHDR* Phdrs = (ELF64_PHDR*)((UINT8*)Kernel + Header->Phoff);
 	DebugPrint0402("[GUEST] Loading ELF: Phoff=0x%lx, Phnum=%lu, Entry=0x%lx\n",
@@ -156,6 +153,7 @@ BootKernel(
 
 	DebugPrint0402("[GUEST] Kernel dynamically mapped successfully\n");
 
+	/*
 	MULTIBOOT2_TAG_ELF_SECTIONS* ElfTag = (MULTIBOOT2_TAG_ELF_SECTIONS*)(MbiBuffer + CurrentOffset);
 	ElfTag->Type = MULTIBOOT_TAG_TYPE_ELF_SECTIONS;
 	ElfTag->Size = ElfTagSize;
@@ -174,6 +172,7 @@ BootKernel(
 
 	CurrentOffset += ALIGN_UP_8(ElfTagSize);
 	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
+	*/
 
 	MULTIBOOT2_TAG_MMAP* MmapTag = (MULTIBOOT2_TAG_MMAP*)(MbiBuffer + CurrentOffset);
 	MmapTag->Type = MULTIBOOT_TAG_TYPE_MMAP;
