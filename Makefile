@@ -53,7 +53,7 @@ TARGET_EFI  := $(BUILD_DIR)/Inexorable.efi
 TARGET_FD   := inexorable.fd
 TARGET_ROOTFS := inexorable_rootfs.img
 
-.PHONY: all efi reset_vector fd rootfs run runsmp benchmark clean
+.PHONY: all efi reset_vector fd rootfs run runsmp testnet benchmark clean
 
 all: $(TARGET_FD)
 
@@ -134,6 +134,10 @@ runsmp: $(TARGET_FD) $(TARGET_ROOTFS)
 	    -serial stdio \
 	    -display none \
 	    -no-reboot
+
+# Run PCIe Network Controller Verification Suite
+testnet: $(TARGET_FD) $(TARGET_ROOTFS)
+	$(PYTHON) scripts/test_network.py
 
 # Run Automated Benchmark vs OVMF
 benchmark: $(TARGET_FD) $(TARGET_ROOTFS)
