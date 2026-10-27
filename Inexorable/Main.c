@@ -121,7 +121,6 @@ void InexorableInit(void) {
     SerialPrint("\n");
     SerialPrint("====================================================================\n");
     SerialPrint("   INEXORABLE: Zero-Enumeration Direct-Long-Mode UEFI Firmware\n");
-    SerialPrint("   Lead Architect: Borhan Tugsan Balci (bt-balci)\n");
     SerialPrint("====================================================================\n");
     SerialPrint("[TELEMETRY] T0 (Firmware Reset -> Long Mode Entry): %u cycles\n", T0);
 

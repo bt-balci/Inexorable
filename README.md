@@ -1,7 +1,5 @@
 # Inexorable
 
-> *"We strip off everything we don't need."*
-
 **Inexorable** is a zero-enumeration, direct-long-mode standalone UEFI firmware engineered from first principles for hypervisors, cloud microVMs, confidential containers, and serverless compute runtimes.
 
 By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire EDK2 driver stack, Inexorable boots the Linux kernel in **70 ms** (mean) / **56 ms** (min)—**over 36× faster than EDK2 / OVMF**—with a core binary footprint of just **28.5 KB** and **95.6% guest RAM efficiency**.
@@ -221,13 +219,16 @@ make
 # 2. Package the in-memory root filesystem
 make rootfs
 
-# 3. Launch Linux virtual machine under QEMU with KVM and VirtIO networking
+# 3. Launch Linux virtual machine under QEMU with KVM and VirtIO networking (1 CPU)
 make run
 
-# 4. Execute the automated performance benchmark suite vs OVMF
+# 4. Launch Linux virtual machine with 4 SMP cores
+make runsmp
+
+# 5. Execute the automated performance benchmark suite vs OVMF
 make benchmark
 
-# 5. Clean intermediate objects and output binaries
+# 6. Clean intermediate objects and output binaries
 make clean
 ```
 

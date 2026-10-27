@@ -24,8 +24,6 @@ WSL_DISTRO = "archlinux"
 
 INIT_SCRIPT = """#!/bin/sh
 # INEXORABLE Zero-Overhead Direct Rootfs Init
-# Lead Architect: Borhan Tugsan Balci (bt-balci)
-# Motto: "We strip off everything we don't need"
 
 # 1. Mount virtual filesystems
 mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
@@ -63,8 +61,6 @@ UPTIME=$(cut -d' ' -f1 /proc/uptime 2>/dev/null || echo 0)
 echo ""
 echo "===================================================================="
 echo "   INEXORABLE: Zero-Enumeration Standalone Linux Rootfs (100% RAM) "
-echo "   Lead Architect: Borhan Tugsan Balci (bt-balci)                  "
-echo "   Motto: Strip off everything we do not need                      "
 echo "===================================================================="
 echo "Kernel:   Linux ${KERNEL_VER}"
 echo "CPUs:     ${CPU_COUNT} active cores"
@@ -76,20 +72,24 @@ echo ""
 echo "System ready. Welcome to Inexorable userspace."
 echo ""
 
-# 4. Launch interactive root shell on serial console
+# 4. Handle signals for clean poweroff
+trap 'sync; /bin/poweroff' USR2 TERM INT
+
+# 5. Launch interactive root shell on serial console
 echo "<5>[INEXORABLE-USERSPACE] Spawning root shell on console..." > /dev/kmsg 2>/dev/null || true
 
-while true; do
-    if [ -c /dev/console ]; then
-        /bin/sh </dev/console >/dev/console 2>&1 || true
-    elif [ -c /dev/ttyS0 ]; then
-        /bin/sh </dev/ttyS0 >/dev/ttyS0 2>&1 || true
-    else
-        /bin/sh || true
-    fi
-    echo "<5>[INEXORABLE-USERSPACE] Shell session ended; pausing 2s..." > /dev/kmsg 2>/dev/null || true
-    sleep 2
-done
+if [ -c /dev/console ]; then
+    /bin/sh </dev/console >/dev/console 2>&1 || true
+elif [ -c /dev/ttyS0 ]; then
+    /bin/sh </dev/ttyS0 >/dev/ttyS0 2>&1 || true
+else
+    /bin/sh || true
+fi
+
+# When shell exits (e.g. via 'exit' command), cleanly shut down the machine
+echo "Shell session ended. Powering off system..."
+sync
+/bin/poweroff
 """
 
 OS_RELEASE = """NAME="Inexorable OS"
@@ -148,6 +148,8 @@ def generate_rootfs_tree(staging_dir):
     print("[ROOTFS] Skeleton and configurations generated.")
 
 def to_wsl_path(win_path):
+    if sys.platform != "win32":
+        return os.path.abspath(win_path)
     p = os.path.abspath(win_path).replace("\\", "/")
     if len(p) >= 2 and p[1] == ":":
         drive = p[0].lower()
@@ -210,6 +212,31 @@ elif [ -f /usr/lib/ld-linux-x86-64.so.2 ]; then
     cp -a /usr/lib/ld-linux-x86-64.so.2 $ROOT/lib64/
 fi
 
+# Provide standalone poweroff, halt, shutdown, and reboot utilities (overriding non-working systemctl links)
+cat << 'SHUTDOWN_SCRIPT' > $ROOT/bin/poweroff
+#!/bin/sh
+echo "Powering off system..."
+sync
+/bin/busybox poweroff -f 2>/dev/null || echo o > /proc/sysrq-trigger 2>/dev/null
+SHUTDOWN_SCRIPT
+chmod +x $ROOT/bin/poweroff
+
+ln -sf /bin/poweroff $ROOT/sbin/poweroff 2>/dev/null || cp $ROOT/bin/poweroff $ROOT/sbin/poweroff
+ln -sf /bin/poweroff $ROOT/bin/halt 2>/dev/null || cp $ROOT/bin/poweroff $ROOT/bin/halt
+ln -sf /bin/poweroff $ROOT/sbin/halt 2>/dev/null || cp $ROOT/bin/poweroff $ROOT/sbin/halt
+ln -sf /bin/poweroff $ROOT/bin/shutdown 2>/dev/null || cp $ROOT/bin/poweroff $ROOT/bin/shutdown
+ln -sf /bin/poweroff $ROOT/sbin/shutdown 2>/dev/null || cp $ROOT/bin/poweroff $ROOT/sbin/shutdown
+
+cat << 'REBOOT_SCRIPT' > $ROOT/bin/reboot
+#!/bin/sh
+echo "Rebooting system..."
+sync
+/bin/busybox reboot -f 2>/dev/null || echo b > /proc/sysrq-trigger 2>/dev/null
+REBOOT_SCRIPT
+chmod +x $ROOT/bin/reboot
+
+ln -sf /bin/reboot $ROOT/sbin/reboot 2>/dev/null || cp $ROOT/bin/reboot $ROOT/sbin/reboot
+
 # Create initial static device nodes required before devtmpfs mounts
 mknod -m 600 $ROOT/dev/console c 5 1 2>/dev/null || true
 mknod -m 666 $ROOT/dev/null c 1 3 2>/dev/null || true
@@ -234,9 +261,13 @@ echo "[WSL] Successfully packaged Inexorable rootfs: $SIZE bytes ($((SIZE / 1024
         generate_rootfs_tree(staging_dir)
         return
 
-    # Run packing via WSL
-    print(f"[HOST] Invoking WSL distro '{WSL_DISTRO}' to assemble Linux binaries...")
-    cmd = ["wsl", "-d", WSL_DISTRO, "-e", "bash", "-c", wsl_script]
+    # Run packing via WSL or native bash
+    if sys.platform == "win32":
+        print(f"[HOST] Invoking WSL distro '{WSL_DISTRO}' to assemble Linux binaries...")
+        cmd = ["wsl", "-d", WSL_DISTRO, "-e", "bash", "-c", wsl_script]
+    else:
+        print("[HOST] Assembling Linux binaries natively in current environment...")
+        cmd = ["bash", "-c", wsl_script]
     res = subprocess.run(cmd, capture_output=True, text=True)
     if res.stdout:
         print(res.stdout)
