@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Source Files">
@@ -15,69 +15,78 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Acpi.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="InitrdLoadFile2.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Main.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Variable.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="x86.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Time.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Misc.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VirtualMemory.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Memory.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Misc.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="PeLoader.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Protocol.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="QemuFwCfg.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RngProtocol.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Serial.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Time.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Variable.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="VirtualMemory.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Acpi.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Efi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="x86.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Util.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Vm.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Variable.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Time.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Misc.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VirtualMemory.h">
+    <ClInclude Include="InitrdLoadFile2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Memory.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Misc.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="PeLoader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Protocol.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Firmware.h">
+    <ClInclude Include="QemuFwCfg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Elf.h">
+    <ClInclude Include="RngProtocol.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Boot.h">
+    <ClInclude Include="Serial.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Variable.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

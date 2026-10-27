@@ -90,17 +90,20 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>BaseCacheMaintenanceLib.lib;BaseCpuLib.lib;BaseDebugPrintErrorLevelLib.lib;BaseLib.lib;BaseMemoryLib.lib;BasePrintLib.lib;BaseSynchronizationLib.lib;GlueLib.lib;UefiFileHandleLib.lib;IntrinsicLib.lib;UefiApplicationEntryPoint.lib;UefiBootServicesTableLib.lib;UefiDebugLibConOut.lib;UefiDevicePathLibDevicePathProtocol.lib;UefiDriverEntryPoint.lib;UefiHiiServicesLib.lib;UefiHiiLib.lib;UefiLib.lib;UefiMemoryAllocationLib.lib;UefiMemoryLib.lib;UefiRuntimeServicesTableLib.lib;UefiRuntimeLib.lib;UefiShellLib.lib;UefiSortLib.lib;BaseIoLib.lib;SerialPortLib.lib;TdxLib.lib;RegisterFilterLib.lib;CcProbeLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
-      <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <BaseAddress>0x40000000</BaseAddress>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <FixedBaseAddress>true</FixedBaseAddress>
+      <SectionAlignment>4096</SectionAlignment>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -115,17 +118,20 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>EFI Application</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>BaseCacheMaintenanceLib.lib;BaseCpuLib.lib;BaseDebugPrintErrorLevelLib.lib;BaseLib.lib;BaseMemoryLib.lib;BasePrintLib.lib;BaseSynchronizationLib.lib;GlueLib.lib;UefiFileHandleLib.lib;IntrinsicLib.lib;UefiApplicationEntryPoint.lib;UefiBootServicesTableLib.lib;UefiDebugLibConOut.lib;UefiDevicePathLibDevicePathProtocol.lib;UefiDriverEntryPoint.lib;UefiHiiServicesLib.lib;UefiHiiLib.lib;UefiLib.lib;UefiMemoryAllocationLib.lib;UefiMemoryLib.lib;UefiRuntimeServicesTableLib.lib;UefiRuntimeLib.lib;UefiShellLib.lib;UefiSortLib.lib;BaseIoLib.lib;SerialPortLib.lib;TdxLib.lib;RegisterFilterLib.lib;CcProbeLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
-      <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
+      <BaseAddress>0x40000000</BaseAddress>
+      <RandomizedBaseAddress>false</RandomizedBaseAddress>
+      <FixedBaseAddress>true</FixedBaseAddress>
+      <SectionAlignment>4096</SectionAlignment>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -138,7 +144,7 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
@@ -147,9 +153,8 @@
     <Link>
       <SubSystem>EFI Application</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>BaseCacheMaintenanceLib.lib;BaseCpuLib.lib;BaseDebugPrintErrorLevelLib.lib;BaseLib.lib;BaseMemoryLib.lib;BasePrintLib.lib;BaseSynchronizationLib.lib;GlueLib.lib;UefiFileHandleLib.lib;IntrinsicLib.lib;UefiApplicationEntryPoint.lib;UefiBootServicesTableLib.lib;UefiDebugLibConOut.lib;UefiDevicePathLibDevicePathProtocol.lib;UefiDriverEntryPoint.lib;UefiHiiServicesLib.lib;UefiHiiLib.lib;UefiLib.lib;UefiMemoryAllocationLib.lib;UefiMemoryLib.lib;UefiRuntimeServicesTableLib.lib;UefiRuntimeLib.lib;UefiShellLib.lib;UefiSortLib.lib;BaseIoLib.lib;SerialPortLib.lib;TdxLib.lib;RegisterFilterLib.lib;CcProbeLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
-      <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <BaseAddress>0x40000000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
@@ -169,7 +174,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalIncludeDirectories>$(ProjectDir)..\include;C:\edk\edk2\CryptoPkg\include;C:\edk\edk2\ShellPkg\Include;C:\edk\edk2\MdeModulePkg\Include;C:\edk\edk2\MdePkg\Include\X64;C:\edk\edk2\MdePkg\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ProjectDir)..\include;$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>-gdwarf %(AdditionalOptions)</AdditionalOptions>
       <ExceptionHandling>false</ExceptionHandling>
@@ -178,9 +183,8 @@
     <Link>
       <SubSystem>EFI Application</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>BaseCacheMaintenanceLib.lib;BaseCpuLib.lib;BaseDebugPrintErrorLevelLib.lib;BaseLib.lib;BaseMemoryLib.lib;BasePrintLib.lib;BaseSynchronizationLib.lib;GlueLib.lib;UefiFileHandleLib.lib;IntrinsicLib.lib;UefiApplicationEntryPoint.lib;UefiBootServicesTableLib.lib;UefiDebugLibConOut.lib;UefiDevicePathLibDevicePathProtocol.lib;UefiDriverEntryPoint.lib;UefiHiiServicesLib.lib;UefiHiiLib.lib;UefiLib.lib;UefiMemoryAllocationLib.lib;UefiMemoryLib.lib;UefiRuntimeServicesTableLib.lib;UefiRuntimeLib.lib;UefiShellLib.lib;UefiSortLib.lib;BaseIoLib.lib;SerialPortLib.lib;TdxLib.lib;RegisterFilterLib.lib;CcProbeLib.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
       <EntryPointSymbol>UefiMain</EntryPointSymbol>
-      <AdditionalLibraryDirectories>C:\edk\edk2 libs\x64\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <IgnoreAllDefaultLibraries>true</IgnoreAllDefaultLibraries>
       <BaseAddress>0x40000000</BaseAddress>
       <RandomizedBaseAddress>false</RandomizedBaseAddress>
@@ -192,41 +196,32 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Acpi.c" />
+    <ClCompile Include="InitrdLoadFile2.c" />
     <ClCompile Include="Main.c" />
     <ClCompile Include="Memory.c" />
     <ClCompile Include="Misc.c" />
+    <ClCompile Include="PeLoader.c" />
     <ClCompile Include="Protocol.c" />
+    <ClCompile Include="QemuFwCfg.c" />
+    <ClCompile Include="RngProtocol.c" />
+    <ClCompile Include="Serial.c" />
     <ClCompile Include="Time.c" />
     <ClCompile Include="Variable.c" />
     <ClCompile Include="VirtualMemory.c" />
-    <ClCompile Include="x86.c" />
-    <ClCompile Include="Serial.c" />
-    <ClCompile Include="Acpi.c" />
-    <ClCompile Include="InitrdLoadFile2.c" />
-    <ClCompile Include="RngProtocol.c" />
-    <ClCompile Include="PeLoader.c" />
-    <ClCompile Include="QemuFwCfg.c" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Boot.h" />
+    <ClInclude Include="Acpi.h" />
     <ClInclude Include="Efi.h" />
-    <ClInclude Include="Elf.h" />
-    <ClInclude Include="Firmware.h" />
+    <ClInclude Include="InitrdLoadFile2.h" />
     <ClInclude Include="Memory.h" />
     <ClInclude Include="Misc.h" />
-    <ClInclude Include="Protocol.h" />
-    <ClInclude Include="Time.h" />
-    <ClInclude Include="Util.h" />
-    <ClInclude Include="Variable.h" />
-    <ClInclude Include="VirtualMemory.h" />
-    <ClInclude Include="Vm.h" />
-    <ClInclude Include="x86.h" />
-    <ClInclude Include="Serial.h" />
-    <ClInclude Include="Acpi.h" />
-    <ClInclude Include="InitrdLoadFile2.h" />
-    <ClInclude Include="RngProtocol.h" />
     <ClInclude Include="PeLoader.h" />
+    <ClInclude Include="Protocol.h" />
     <ClInclude Include="QemuFwCfg.h" />
+    <ClInclude Include="RngProtocol.h" />
+    <ClInclude Include="Serial.h" />
+    <ClInclude Include="Variable.h" />
   </ItemGroup>
   <ItemGroup>
     <NASM Include="Boot.asm">
