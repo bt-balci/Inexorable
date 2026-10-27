@@ -9,6 +9,7 @@ By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire
 ## Table of Contents
 
 - [Motivation & Philosophy](#motivation--philosophy)
+- [Documentation Suite](#documentation-suite)
 - [Key Architectural Features](#key-architectural-features)
   - [1. Direct-Long-Mode Reset Vector](#1-direct-long-mode-reset-vector)
   - [2. Standalone Zero-EDK2 Firmware Core](#2-standalone-zero-edk2-firmware-core)
@@ -24,6 +25,18 @@ By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire
   - [Cross-Platform Makefile](#cross-platform-makefile)
   - [Visual Studio 2022 Solution](#visual-studio-2022-solution)
 - [License & Authors](#license--authors)
+
+---
+
+## Documentation Suite
+
+Comprehensive technical documentation is organized in the [`docs/`](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/index.md) directory:
+
+- [**Architecture & Boot Flow**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/boot-flow.md): Step-by-step execution from hardware reset (`0xFFFFFFF0`) to userspace shell.
+- [**What We Strip (Firmware Philosophy)**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/what-we-strip.md): Complete analysis of why traditional UEFI is slow and everything Inexorable eliminates.
+- [**EFI Subsystem & Protocols**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/protocols.md): How Inexorable implements memory services, `LOAD_FILE2` zero-copy DMA, hardware RNG, and system tables without EDK2.
+- [**ACPI & PCIe Architecture**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/acpi-and-pcie.md): MCFG ECAM handoff, DSDT AML root bridge, motherboard reservations (`PNP0C02`), and S5 poweroff.
+- [**Deep Performance Analysis**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/performance-analysis.md): Empirical latency breakdown, serial UART bottleneck analysis, and multi-core SMP benchmarks.
 
 ---
 
@@ -102,17 +115,19 @@ flowchart LR
 
 Comparative benchmark results conducted on AMD Ryzen 9 7900X (WSL2 KVM, QEMU 10.2.0, Arch Linux kernel 7.2.11):
 
-| Metric | EDK2 OVMF | Inexorable | Delta / Speedup |
+| Metric | Inexorable | EDK2 OVMF | Delta / Speedup |
 |:---|:---:|:---:|:---:|
-| **Firmware Latency (Mean)** | 2,591.28 ms | **70.32 ms** | **36.8× faster** ⚡ |
-| **Firmware Latency (Min)** | 2,205.79 ms | **56.36 ms** | **39.1× faster** ⚡ |
-| **Firmware Latency (Max)** | 3,114.65 ms | **98.45 ms** | **31.6× faster** |
-| **Firmware Core Size** | 3,653,632 B | **28,520 B** | **128× smaller** |
-| **Flash Image (`.fd`)** | 4,194,304 B | **2,097,152 B** | **2× smaller** |
-| **Guest Usable Memory (2048 MB)** | 1,894 MB (92.4%) | **1,958 MB (95.6%)** | **+64 MB usable RAM** |
-| **EFI Memory Map Descriptors** | 48 – 64 entries | **16 entries** | **Clean, contiguous** |
-| **VirtIO PCIe Devices Active** | Yes | **Yes (Out-of-the-box)** | Fully Functional |
-| **Time to Userspace Shell** | 3.00 seconds | **1.45 – 2.56 seconds** | Sub-second ready |
+| **In-Guest Firmware Latency (Mean)** | **33.66 ms** | 540.96 ms | **16.1× faster** ⚡ |
+| **In-Guest Firmware Latency (Min)** | **30.83 ms** | 517.23 ms | **16.8× faster** ⚡ |
+| **Host FW Latency to Kernel (Mean)** | **300.29 ms** | 620.96 ms | **2.1× faster** |
+| **Linux Kernel Execution Phase** | **900.88 ms** | 931.44 ms | Identical payload |
+| **Total Cold-Boot to Shell (Mean)** | **1,201.17 ms** (1.20 s) | 1,552.39 ms (1.55 s) | **~351 ms faster** |
+| **Total Cold-Boot to Shell (Min)** | **1,178.40 ms** (1.18 s) | 1,493.09 ms (1.49 s) | **~315 ms faster** |
+| **Active Firmware Core Size** | **28,520 B** (28.5 KB) | 3,653,632 B (3.65 MB) | **128× smaller** |
+| **Flash Image (`.fd`)** | **2,097,152 B** (2 MB) | 4,194,304 B (4 MB) | **2× smaller** |
+| **Guest Usable Memory (2048 MB)** | **1,958 MB (95.6%)** | 1,894 MB (92.4%) | **+64 MB usable RAM** |
+| **EFI Memory Map Descriptors** | **16 descriptors** | 48 – 64 descriptors | **Clean, coalesced** |
+| **VirtIO PCIe Devices Active** | **Yes (Out-of-the-box)** | Yes | Fully Functional |
 
 ---
 
@@ -169,6 +184,13 @@ Inexorable/
 │   ├── VirtualMemory.c          # SetVirtualAddressMap & ConvertPointer stubs
 │   ├── Inexorable.vcxproj       # Visual Studio 2022 C++ Project
 │   └── Inexorable.vcxproj.filters
+├── docs/                        # Complete technical documentation suite
+│   ├── index.md                 # Documentation portal
+│   ├── boot-flow.md             # Execution pipeline & reset vector architecture
+│   ├── what-we-strip.md         # Firmware philosophy & eliminated legacy components
+│   ├── protocols.md             # Spec-compliant UEFI 2.8+ protocols & memory allocator
+│   ├── acpi-and-pcie.md         # ACPI 2.0+ tables, PCIe root bridge, & MMCF reservation
+│   └── performance-analysis.md  # Deep latency breakdown & comparative benchmarks
 ├── qemu_target/                 # Hardware reset vector
 │   ├── reset_vector.asm         # 16-bit Real Mode -> 64-bit Long Mode trampoline
 │   └── reset_vector.bin         # Assembled binary payload
@@ -178,9 +200,8 @@ Inexorable/
 ├── scripts/                     # Performance verification suite
 │   ├── benchmark.py             # Automated latency benchmark against OVMF
 │   └── run_benchmark.sh         # Benchmark launcher shell script
-├── Inexorable.slnx               # Visual Studio solution file
-├── Makefile                     # Cross-platform GNU Makefile
-└── HANDOFF.md                   # Technical implementation notes and handoff log
+├── Inexorable.slnx              # Visual Studio solution file
+└── Makefile                     # Cross-platform GNU Makefile
 ```
 
 ---
