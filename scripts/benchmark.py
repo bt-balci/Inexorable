@@ -27,7 +27,7 @@ INITRD_PATH = STANDALONE_ROOTFS if os.path.exists(STANDALONE_ROOTFS) else "/boot
 CMDLINE = (
     "console=ttyS0 earlycon=uart8250,io,0x3f8 quiet loglevel=3 "
     "tsc=reliable clocksource=tsc no_timer_check lpj=3187195 "
-    "audit=0 mitigations=off pci=off"
+    "audit=0 mitigations=off"
 )
 
 def count_lines(directory, extensions=(".c", ".h", ".asm")):
