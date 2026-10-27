@@ -53,7 +53,7 @@ TARGET_EFI  := $(BUILD_DIR)/Inexorable.efi
 TARGET_FD   := inexorable.fd
 TARGET_ROOTFS := inexorable_rootfs.img
 
-.PHONY: all efi reset_vector fd rootfs run runsmp testnet benchmark clean
+.PHONY: all efi reset_vector fd rootfs run runsmp rundbg runsmpdbg testnet benchmark clean
 
 all: $(TARGET_FD)
 
@@ -131,6 +131,41 @@ runsmp: $(TARGET_FD) $(TARGET_ROOTFS)
 	    -device virtio-net-pci,netdev=net0 \
 	    -netdev user,id=net0 \
 	    -append "console=ttyS0 earlycon=uart8250,io,0x3f8 quiet loglevel=3 tsc=reliable clocksource=tsc no_timer_check lpj=3187195 audit=0 mitigations=off" \
+	    -serial stdio \
+	    -display none \
+	    -no-reboot
+
+# Run QEMU with Verbose Firmware Telemetry and Debug Logging (1 CPU)
+rundbg: $(TARGET_FD) $(TARGET_ROOTFS)
+	qemu-system-x86_64 \
+	    -enable-kvm \
+	    -machine q35 \
+	    -cpu host \
+	    -m 2G \
+	    -bios $(TARGET_FD) \
+	    -kernel /boot/vmlinuz-linux \
+	    -initrd $(TARGET_ROOTFS) \
+	    -device virtio-net-pci,netdev=net0 \
+	    -netdev user,id=net0 \
+	    -append "console=ttyS0 earlycon=uart8250,io,0x3f8 debug ignore_loglevel loglevel=7 earlyprintk=serial,ttyS0,115200 tsc=reliable clocksource=tsc no_timer_check lpj=3187195 audit=0 mitigations=off" \
+	    -serial stdio \
+	    -display none \
+	    -no-reboot
+
+# Run QEMU with 4 Processors (SMP), Verbose Firmware Telemetry, and Debug Logging
+runsmpdbg: $(TARGET_FD) $(TARGET_ROOTFS)
+	qemu-system-x86_64 \
+	    -enable-kvm \
+	    -machine q35 \
+	    -cpu host \
+	    -smp 4 \
+	    -m 2G \
+	    -bios $(TARGET_FD) \
+	    -kernel /boot/vmlinuz-linux \
+	    -initrd $(TARGET_ROOTFS) \
+	    -device virtio-net-pci,netdev=net0 \
+	    -netdev user,id=net0 \
+	    -append "console=ttyS0 earlycon=uart8250,io,0x3f8 debug ignore_loglevel loglevel=7 earlyprintk=serial,ttyS0,115200 tsc=reliable clocksource=tsc no_timer_check lpj=3187195 audit=0 mitigations=off" \
 	    -serial stdio \
 	    -display none \
 	    -no-reboot

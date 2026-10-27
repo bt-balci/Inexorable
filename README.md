@@ -298,13 +298,19 @@ make run
 # 4. Launch Linux virtual machine with 4 SMP cores
 make runsmp
 
-# 5. Execute automated PCIe network verification (virtio-net & e1000e ping test)
+# 5. Launch with Verbose Firmware Telemetry & Full Debug Logging (1 CPU)
+make rundbg
+
+# 6. Launch with 4 SMP cores, Verbose Firmware Telemetry & Full Debug Logging
+make runsmpdbg
+
+# 7. Execute automated PCIe network verification (virtio-net & e1000e ping test)
 make testnet
 
-# 6. Execute the automated performance benchmark suite vs OVMF
+# 8. Execute the automated performance benchmark suite vs OVMF
 make benchmark
 
-# 7. Clean intermediate objects and output binaries
+# 9. Clean intermediate objects and output binaries
 make clean
 ```
 

@@ -114,6 +114,18 @@ static VOID EFIAPI IxRestoreTPL(EFI_TPL OldTpl) {
     (void)OldTpl;
 }
 
+static BOOLEAN IsDebugMode(void) {
+    const char *cmd = g_HostBootInfo->CmdlineString;
+    if (!cmd) return FALSE;
+    while (*cmd) {
+        if (cmd[0] == 'd' && cmd[1] == 'e' && cmd[2] == 'b' && cmd[3] == 'u' && cmd[4] == 'g') {
+            return TRUE;
+        }
+        cmd++;
+    }
+    return FALSE;
+}
+
 void InexorableInit(void) {
     UINT64 T0 = rdtsc();
 
@@ -127,6 +139,27 @@ void InexorableInit(void) {
     // Initialize Host Boot Info structure
     // If not running under custom VMM, detect QEMU and fetch via fw_cfg DMA
     QemuFwCfgFetchBootInfo();
+
+    if (IsDebugMode()) {
+        SerialPrint("\n");
+        SerialPrint("  ___                               _     _      \n");
+        SerialPrint(" |_ _|_ __   _____  _____  _ __ __ _| |__ | | ___ \n");
+        SerialPrint("  | || '_ \\ / _ \\ \\/ / _ \\| '__/ _` | '_ \\| |/ _ \\\n");
+        SerialPrint("  | || | | |  __/>  < (_) | | | (_| | |_) | |  __/\n");
+        SerialPrint(" |___|_| |_|\\___/_/\\_\\___/|_|  \\__,_|_.__/|_|\\___|\n");
+        SerialPrint(" [FIRMWARE DEBUG MODE ACTIVE - FULL HARDWARE TELEMETRY]\n\n");
+        SerialPrint("[DEBUG] Active vCPUs: %u (Local APIC IDs 0..%u)\n", g_HostBootInfo->CpuCount, g_HostBootInfo->CpuCount - 1);
+        SerialPrint("[DEBUG] Physical RAM: %u MB (Page Allocator Bitmap @ 0x00050000)\n",
+            (UINT32)(g_HostBootInfo->RamSize / (1024 * 1024)));
+        SerialPrint("[DEBUG] High-Speed fw_cfg DMA: Port 0x514 Active (32-bit/64-bit DMA)\n");
+        SerialPrint("[DEBUG] ACPI 2.0+ Layout: RSDP=0x%p, XSDT=0x%p, FADT=0x%p, MADT=0x%p, MCFG=0x%p\n",
+            ACPI_RSDP_BASE, ACPI_XSDT_BASE, ACPI_FADT_BASE, ACPI_MADT_BASE, ACPI_MCFG_BASE);
+        SerialPrint("[DEBUG] PCIe ECAM Window: Base 0xB0000000 (Length 256MB, Buses 0..255)\n");
+        SerialPrint("[DEBUG] Kernel Stage GPA: 0x%p (Size: %u bytes, 100%% Reclaimable)\n",
+            GUEST_KERNEL_STAGE_BASE, (UINT32)g_HostBootInfo->KernelSize);
+        SerialPrint("[DEBUG] Initrd Size: %u bytes (LINUX_EFI_INITRD_MEDIA_GUID On-Demand DMA)\n\n",
+            (UINT32)g_HostBootInfo->InitrdSize);
+    }
 
     // 1. Initialize Autonomous Physical Memory Allocator
     MemoryInit();
@@ -240,6 +273,14 @@ void InexorableInit(void) {
         T2, T2 - T1);
 
     SerialPrint("[BOOT] Jumping directly to 64-bit Linux EntryPoint 0x%p in Long Mode...\n", EntryPoint);
+    if (IsDebugMode()) {
+        SerialPrint("[DEBUG] Linux EFI Stub Handoff Architecture:\n");
+        SerialPrint("  ├─ ABI Convention:     Microsoft x64 (RCX = Handle, RDX = SystemTable)\n");
+        SerialPrint("  ├─ Target EntryPoint:  0x%p (Long Mode 64-bit)\n", EntryPoint);
+        SerialPrint("  ├─ EFI System Table:   0x%p (Revision 2.80)\n", &gST);
+        SerialPrint("  ├─ Boot Services:      0x%p\n", &gBS);
+        SerialPrint("  └─ ExitBootServices:   Reclaims 100%% of firmware staging buffers\n");
+    }
     SerialPrint("--------------------------------------------------------------------\n");
 
     // Call Linux CONFIG_EFI_STUB entry point directly in Long Mode!

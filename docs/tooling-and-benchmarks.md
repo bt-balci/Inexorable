@@ -217,6 +217,8 @@ The top-level `Makefile` orchestrates compilation, ROM synthesis, rootfs packagi
 | `rootfs` | `make rootfs` | Packages standalone in-memory rootfs `inexorable_rootfs.img` |
 | `run` | `make run` | Boots Linux microVM under QEMU with KVM and VirtIO networking (1 vCPU) |
 | `runsmp` | `make runsmp` | Boots Linux microVM under QEMU with KVM, 4 vCPUs (SMP), and VirtIO net |
+| `rundbg` | `make rundbg` | Boots microVM with verbose firmware telemetry, ASCII flex banner, and full kernel debug dmesg (1 vCPU) |
+| `runsmpdbg` | `make runsmpdbg` | Boots microVM with 4 SMP vCPUs, verbose firmware telemetry, ASCII flex banner, and full kernel debug dmesg |
 | `testnet` | `make testnet` | Runs the automated PCIe network verification suite |
 | `benchmark` | `make benchmark` | Runs the automated comparative latency benchmark against OVMF |
 | `clean` | `make clean` | Removes `build/` directory and generated `inexorable.fd` |
