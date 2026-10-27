@@ -1,5 +1,5 @@
 #pragma once
-#include <Uefi.h>
+#include "efi_spec.h"
 
 EFI_STATUS
 EFIAPI
@@ -10,7 +10,7 @@ IxGetNextHighMonotonicCount(
 VOID
 EFIAPI
 IxResetSystem(
-	IN EFI_RESET_TYPE	ResetType,
+	IN INT32	ResetType,
 	IN EFI_STATUS		ResetStatus,
 	IN UINTN			DataSize,
 	IN VOID*			ResetData OPTIONAL

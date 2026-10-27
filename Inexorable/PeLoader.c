@@ -2,6 +2,7 @@
 #include "Memory.h"
 #include "Protocol.h"
 #include "Serial.h"
+#include "Misc.h"
 #include "inexorable_layout.h"
 #include "Efi.h"
 
@@ -151,9 +152,7 @@ EFI_STATUS IxLoadPeImage(
     // Copy headers
     UINT8 *dst = (UINT8 *)LoadedImageBase;
     const UINT8 *src = (const UINT8 *)StagingBase;
-    for (UINT32 i = 0; i < opt_hdr->SizeOfHeaders; i++) {
-        dst[i] = src[i];
-    }
+    IxCopyMem(dst, (VOID *)src, opt_hdr->SizeOfHeaders);
 
     // Map sections
     const IMAGE_SECTION_HEADER *sections = (const IMAGE_SECTION_HEADER *)((const UINT8 *)opt_hdr + file_hdr->SizeOfOptionalHeader);
@@ -163,17 +162,13 @@ EFI_STATUS IxLoadPeImage(
         UINT32 raw_size = sections[s].SizeOfRawData;
 
         // Zero out section virtual space
-        for (UINT32 j = 0; j < virt_size; j++) {
-            sec_dest[j] = 0;
-        }
+        IxSetMem(sec_dest, virt_size, 0);
 
         // Copy raw section data
         UINT32 copy_size = (virt_size < raw_size) ? virt_size : raw_size;
         if (copy_size > 0 && sections[s].PointerToRawData > 0) {
             const UINT8 *sec_src = src + sections[s].PointerToRawData;
-            for (UINT32 j = 0; j < copy_size; j++) {
-                sec_dest[j] = sec_src[j];
-            }
+            IxCopyMem(sec_dest, (VOID *)sec_src, copy_size);
         }
     }
 

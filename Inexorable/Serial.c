@@ -25,8 +25,6 @@ void SerialInit(void) {
 
 void SerialPutc(char c) {
     outb(COM1_BASE, (uint8_t)c);
-    outb(0xE9, (uint8_t)c);      // QEMU debugcon
-    outb(0x402, (uint8_t)c);     // Inexorable debugcon
 }
 
 void SerialPuts(const char *s) {

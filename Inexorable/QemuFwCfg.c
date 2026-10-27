@@ -8,6 +8,7 @@
 
 #define FW_CFG_SIGNATURE        0x0000
 #define FW_CFG_ID               0x0001
+#define FW_CFG_RAM_SIZE         0x0003
 #define FW_CFG_NB_CPUS          0x0005
 #define FW_CFG_KERNEL_SIZE      0x0008
 #define FW_CFG_INITRD_SIZE      0x000B
@@ -95,7 +96,7 @@ BOOLEAN QemuFwCfgDetect(void) {
     return FALSE;
 }
 
-static BOOLEAN fw_cfg_dma_transfer(UINT16 key, void *dest, UINT32 length) {
+BOOLEAN QemuFwCfgDmaRead(UINT16 key, void *dest, UINT32 length) {
     if (!g_DmaSupported) {
         return FALSE;
     }
@@ -143,6 +144,12 @@ EFI_STATUS QemuFwCfgFetchBootInfo(void) {
     fw_cfg_read_bytes(&cpu_count, 2);
     g_HostBootInfo->CpuCount = cpu_count;
 
+    // RAM size
+    fw_cfg_select(FW_CFG_RAM_SIZE);
+    UINT64 ram_size = 0;
+    fw_cfg_read_bytes(&ram_size, 8);
+    g_HostBootInfo->RamSize = ram_size;
+
     // Command line size & string
     fw_cfg_select(FW_CFG_CMDLINE_SIZE);
     UINT32 cmd_size = 0;
@@ -168,19 +175,20 @@ EFI_STATUS QemuFwCfgFetchBootInfo(void) {
 
     UINT32 total_kernel_size = setup_size + kernel_size;
     g_HostBootInfo->KernelSize = total_kernel_size;
+    g_HostBootInfo->KernelAddress = GUEST_KERNEL_STAGE_BASE;
 
     if (total_kernel_size > 0) {
         SerialPrint("[FW_CFG] Transferring kernel (%u bytes: setup=%u, payload=%u) to GPA 0x%p via DMA...\n",
             total_kernel_size, setup_size, kernel_size, GUEST_KERNEL_STAGE_BASE);
         UINT8 *dest = (UINT8 *)GUEST_KERNEL_STAGE_BASE;
         if (setup_size > 0) {
-            if (!fw_cfg_dma_transfer(FW_CFG_SETUP_DATA, dest, setup_size)) {
+            if (!QemuFwCfgDmaRead(FW_CFG_SETUP_DATA, dest, setup_size)) {
                 fw_cfg_select(FW_CFG_SETUP_DATA);
                 fw_cfg_read_bytes(dest, setup_size);
             }
         }
         if (kernel_size > 0) {
-            if (!fw_cfg_dma_transfer(FW_CFG_KERNEL_DATA, dest + setup_size, kernel_size)) {
+            if (!QemuFwCfgDmaRead(FW_CFG_KERNEL_DATA, dest + setup_size, kernel_size)) {
                 fw_cfg_select(FW_CFG_KERNEL_DATA);
                 fw_cfg_read_bytes(dest + setup_size, kernel_size);
             }
@@ -188,24 +196,14 @@ EFI_STATUS QemuFwCfgFetchBootInfo(void) {
         SerialPrint("[FW_CFG] Kernel transferred successfully\n");
     }
 
-    // Initrd size & data
+    // Initrd size (payload will be streamed directly into Linux buffer on demand!)
     fw_cfg_select(FW_CFG_INITRD_SIZE);
     UINT32 initrd_size = 0;
     fw_cfg_read_bytes(&initrd_size, 4);
     g_HostBootInfo->InitrdSize = initrd_size;
+    g_HostBootInfo->InitrdAddress = 0;
 
-    if (initrd_size > 0) {
-        SerialPrint("[FW_CFG] Transferring initrd (%u bytes) to GPA 0x%p via DMA...\n",
-            initrd_size, GUEST_INITRD_STAGE_BASE);
-        if (!fw_cfg_dma_transfer(FW_CFG_INITRD_DATA, (void *)GUEST_INITRD_STAGE_BASE, initrd_size)) {
-            // Fallback to port I/O read
-            fw_cfg_select(FW_CFG_INITRD_DATA);
-            fw_cfg_read_bytes((void *)GUEST_INITRD_STAGE_BASE, initrd_size);
-        }
-        SerialPrint("[FW_CFG] Initrd transferred successfully\n");
-    }
-
-    SerialPrint("[FW_CFG] Boot info ready: CPUs=%u, KernelSize=%u, InitrdSize=%u, Cmdline=\"%s\"\n",
+    SerialPrint("[FW_CFG] Boot info ready: CPUs=%u, KernelSize=%u, InitrdSize=%u (on-demand DMA streaming), Cmdline=\"%s\"\n",
         g_HostBootInfo->CpuCount, g_HostBootInfo->KernelSize, g_HostBootInfo->InitrdSize, g_HostBootInfo->CmdlineString);
 
     return EFI_SUCCESS;

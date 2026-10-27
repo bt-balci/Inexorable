@@ -36,11 +36,14 @@
 
 #pragma pack(push, 1)
 typedef struct {
+    uint64_t  KernelAddress;
     uint64_t  KernelSize;
+    uint64_t  InitrdAddress;
     uint64_t  InitrdSize;
     uint32_t  CpuCount;
     uint32_t  CmdlineSize;
     char      CmdlineString[1024];
+    uint64_t  RamSize;
 } IX_HOST_BOOT_INFO;
 #pragma pack(pop)
 

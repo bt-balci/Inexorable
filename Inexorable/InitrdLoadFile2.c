@@ -2,6 +2,8 @@
 #include "inexorable_layout.h"
 #include "Protocol.h"
 #include "Serial.h"
+#include "Misc.h"
+#include "QemuFwCfg.h"
 
 static IX_INITRD_DEVICE_PATH g_InitrdDevicePath = {
     .Vendor = {
@@ -46,13 +48,17 @@ static EFI_STATUS EFIAPI IxInitrdLoadFile2(
         return EFI_BUFFER_TOO_SMALL;
     }
 
-    SerialPrint("[INITRD] Streaming initrd (%u bytes) from GPA 0x%p to buffer 0x%p...\n",
-        ActualInitrdSize, GUEST_INITRD_STAGE_BASE, Buffer);
-
-    const UINT8 *src = (const UINT8 *)GUEST_INITRD_STAGE_BASE;
-    UINT8 *dst = (UINT8 *)Buffer;
-    for (UINTN i = 0; i < ActualInitrdSize; i++) {
-        dst[i] = src[i];
+    if (g_HostBootInfo->InitrdAddress != 0) {
+        SerialPrint("[INITRD] Copying initrd (%u bytes) from GPA 0x%p to buffer 0x%p...\n",
+            ActualInitrdSize, g_HostBootInfo->InitrdAddress, Buffer);
+        IxCopyMem(Buffer, (VOID *)g_HostBootInfo->InitrdAddress, ActualInitrdSize);
+    } else {
+        SerialPrint("[INITRD] Streaming initrd (%u bytes) directly into buffer 0x%p via DMA...\n",
+            ActualInitrdSize, Buffer);
+        if (!QemuFwCfgDmaRead(FW_CFG_INITRD_DATA, Buffer, (UINT32)ActualInitrdSize)) {
+            SerialPrint("[INITRD] DMA transfer failed!\n");
+            return EFI_DEVICE_ERROR;
+        }
     }
 
     *BufferSize = ActualInitrdSize;

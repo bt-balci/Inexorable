@@ -98,17 +98,30 @@ VOID EFIAPI IxCopyMem(
     IN VOID  *Source,
     IN UINTN Length
 ) {
+    if (Destination == Source || Length == 0) return;
+
     UINT8 *d = (UINT8 *)Destination;
     const UINT8 *s = (const UINT8 *)Source;
 
-    if (d == s || Length == 0) return;
-
-    if (d < s) {
-        while (Length--) *d++ = *s++;
+    if (d < s || d >= (s + Length)) {
+        __asm__ __volatile__(
+            "cld\n\t"
+            "rep movsb"
+            : "+D"(d), "+S"(s), "+c"(Length)
+            :
+            : "memory"
+        );
     } else {
-        d += Length;
-        s += Length;
-        while (Length--) *--d = *--s;
+        d += Length - 1;
+        s += Length - 1;
+        __asm__ __volatile__(
+            "std\n\t"
+            "rep movsb\n\t"
+            "cld"
+            : "+D"(d), "+S"(s), "+c"(Length)
+            :
+            : "memory"
+        );
     }
 }
 
@@ -117,8 +130,15 @@ VOID EFIAPI IxSetMem(
     IN UINTN Size,
     IN UINT8 Value
 ) {
-    UINT8 *p = (UINT8 *)Buffer;
-    while (Size--) *p++ = Value;
+    if (Size == 0) return;
+    VOID *d = Buffer;
+    __asm__ __volatile__(
+        "cld\n\t"
+        "rep stosb"
+        : "+D"(d), "+c"(Size)
+        : "a"(Value)
+        : "memory"
+    );
 }
 
 EFI_STATUS EFIAPI IxCalculateCrc32(
