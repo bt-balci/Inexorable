@@ -2,13 +2,13 @@
 
 This document describes how Inexorable implements an autonomous, spec-compliant **UEFI 2.8+** runtime environment without linking against any EDK2 libraries.
 
-All standard definitions, types, and GUIDs are defined in [`include/efi_spec.h`](file:///C:/Users/Staarblitz/source/repos/Inexorable/include/efi_spec.h).
+All standard definitions, types, and GUIDs are defined in [`include/efi_spec.h`](../include/efi_spec.h).
 
 ---
 
 ## 1. System Table Architecture
 
-Inexorable initializes an in-memory [`EFI_SYSTEM_TABLE`](file:///C:/Users/Staarblitz/source/repos/Inexorable/include/efi_spec.h#L464) passed directly to the Linux kernel entry point:
+Inexorable initializes an in-memory [`EFI_SYSTEM_TABLE`](../include/efi_spec.h#L464) passed directly to the Linux kernel entry point:
 
 ```c
 EFI_SYSTEM_TABLE gST = {
@@ -32,7 +32,7 @@ EFI_SYSTEM_TABLE gST = {
 ## 2. Boot Services Implementation
 
 ### 2.1 Memory Allocation Services
-Implemented in [`Inexorable/Memory.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Memory.c):
+Implemented in [`Inexorable/Memory.c`](../Inexorable/Memory.c):
 
 1. **`AllocatePages(Type, MemoryType, Pages, *Memory)`**:
    - Implements `AllocateAnyPages`, `AllocateMaxAddress`, and `AllocateAddress`.
@@ -53,7 +53,7 @@ Implemented in [`Inexorable/Memory.c`](file:///C:/Users/Staarblitz/source/repos/
 ---
 
 ### 2.2 `EFI_LOAD_FILE2_PROTOCOL` (On-Demand Zero-Copy DMA Initrd)
-Implemented in [`Inexorable/InitrdLoadFile2.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/InitrdLoadFile2.c):
+Implemented in [`Inexorable/InitrdLoadFile2.c`](../Inexorable/InitrdLoadFile2.c):
 
 - **Protocol GUID**: `LINUX_EFI_INITRD_MEDIA_GUID` (`{0x58de23aa, 0x1149, 0x47e8, {0x80, 0x2e, 0x52, 0x49, 0xa9, 0xab, 0x3a, 0x97}}`).
 - **Target Device Path**: `EFI_DEVICE_PATH_PROTOCOL` with Vendor Media Device Path type (`MEDIA_DEVICE_PATH`, `MEDIA_VENDOR_DP`).
@@ -71,7 +71,7 @@ Implemented in [`Inexorable/InitrdLoadFile2.c`](file:///C:/Users/Staarblitz/sour
 ---
 
 ### 2.3 `EFI_RNG_PROTOCOL` (Hardware RDRAND Entropy)
-Implemented in [`Inexorable/RngProtocol.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/RngProtocol.c):
+Implemented in [`Inexorable/RngProtocol.c`](../Inexorable/RngProtocol.c):
 
 - **Protocol GUID**: `EFI_RNG_PROTOCOL_GUID` (`{0x3152bca5, 0xeade, 0x433d, {0x86, 0x2e, 0xc0, 0x1c, 0xdc, 0x29, 0x8f, 0x44}}`).
 - **Operation**:
@@ -87,7 +87,7 @@ Implemented in [`Inexorable/RngProtocol.c`](file:///C:/Users/Staarblitz/source/r
 ---
 
 ### 2.4 Handle Database & Protocol Management
-Implemented in [`Inexorable/Protocol.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Protocol.c):
+Implemented in [`Inexorable/Protocol.c`](../Inexorable/Protocol.c):
 
 - **`InstallProtocolInterface(*Handle, *Protocol, InterfaceType, *Interface)`**: Registers protocol interfaces on handles.
 - **`LocateProtocol(*Protocol, *Registration, **Interface)`**: Locates the first registered protocol matching a given GUID.
@@ -109,7 +109,7 @@ Registered via `InstallConfigurationTable()` into `gST.ConfigurationTable`:
 
 ## 4. Runtime Services Implementation
 
-Implemented in [`Inexorable/Misc.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Misc.c), [`Inexorable/Time.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Time.c), and [`Inexorable/Variable.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Variable.c):
+Implemented in [`Inexorable/Misc.c`](../Inexorable/Misc.c), [`Inexorable/Time.c`](../Inexorable/Time.c), and [`Inexorable/Variable.c`](../Inexorable/Variable.c):
 
 1. **`ResetSystem(ResetType, ResetStatus, DataSize, *ResetData)`**:
    - Supports `EfiResetCold`, `EfiResetWarm`, and `EfiResetShutdown`.

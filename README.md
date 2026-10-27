@@ -1,8 +1,23 @@
 # Inexorable
 
+<div align="center">
+
+![Firmware](https://img.shields.io/badge/Firmware-UEFI%202.8%2B%20Freestanding-blue?style=flat-square)
+![Architecture](https://img.shields.io/badge/Arch-x86__64%20Direct--Long--Mode-orange?style=flat-square)
+![Latency](https://img.shields.io/badge/In--Guest%20Firmware%20Latency-~30%20ms-brightgreen?style=flat-square)
+![Footprint](https://img.shields.io/badge/Core%20Binary-28.5%20KB-purple?style=flat-square)
+![RAM Density](https://img.shields.io/badge/RAM%20Efficiency-95.6%25-success?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+
+**Zero-Enumeration, Direct-Long-Mode Standalone UEFI Firmware for Cloud Hypervisors & MicroVMs**
+
+</div>
+
+---
+
 **Inexorable** is a zero-enumeration, direct-long-mode standalone UEFI firmware engineered from first principles for hypervisors, cloud microVMs, confidential containers, and serverless compute runtimes.
 
-By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire EDK2 driver stack, Inexorable boots the Linux kernel in **70 ms** (mean) / **56 ms** (min)—**over 36× faster than EDK2 / OVMF**—with a core binary footprint of just **28.5 KB** and **95.6% guest RAM efficiency**.
+By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire EDK2 driver stack, Inexorable boots the Linux kernel in **28 to 33 ms** in-guest firmware time—**over 20× faster than EDK2 / OVMF**—with a core binary footprint of just **28.5 KB** and **95.6% guest RAM efficiency**.
 
 ---
 
@@ -19,6 +34,7 @@ By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire
   - [6. Hardware-Backed RDRAND Protocol](#6-hardware-backed-rdrand-protocol)
 - [Performance Benchmarks](#performance-benchmarks)
 - [Physical Memory Architecture](#physical-memory-architecture)
+- [Developer Tooling & Verification Suite](#developer-tooling--verification-suite)
 - [Repository Structure](#repository-structure)
 - [Prerequisites & Toolchain](#prerequisites--toolchain)
 - [Building & Running](#building--running)
@@ -30,13 +46,14 @@ By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire
 
 ## Documentation Suite
 
-Comprehensive technical documentation is organized in the [`docs/`](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/index.md) directory:
+Comprehensive technical documentation is organized in the [`docs/`](docs/index.md) directory:
 
-- [**Architecture & Boot Flow**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/boot-flow.md): Step-by-step execution from hardware reset (`0xFFFFFFF0`) to userspace shell.
-- [**What We Strip (Firmware Philosophy)**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/what-we-strip.md): Complete analysis of why traditional UEFI is slow and everything Inexorable eliminates.
-- [**EFI Subsystem & Protocols**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/protocols.md): How Inexorable implements memory services, `LOAD_FILE2` zero-copy DMA, hardware RNG, and system tables without EDK2.
-- [**ACPI & PCIe Architecture**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/acpi-and-pcie.md): MCFG ECAM handoff, DSDT AML root bridge, motherboard reservations (`PNP0C02`), and S5 poweroff.
-- [**Deep Performance Analysis**](file:///C:/Users/Staarblitz/source/repos/Inexorable/docs/performance-analysis.md): Empirical latency breakdown, serial UART bottleneck analysis, and multi-core SMP benchmarks.
+- [**Architecture & Boot Flow**](docs/boot-flow.md): Step-by-step execution from hardware reset (`0xFFFFFFF0`) to userspace shell.
+- [**What We Strip (Firmware Philosophy)**](docs/what-we-strip.md): Complete analysis of why traditional UEFI is slow and everything Inexorable eliminates.
+- [**EFI Subsystem & Protocols**](docs/protocols.md): How Inexorable implements memory services, `LOAD_FILE2` zero-copy DMA, hardware RNG, and system tables without EDK2.
+- [**ACPI & PCIe Architecture**](docs/acpi-and-pcie.md): MCFG ECAM handoff, DSDT AML root bridge, motherboard reservations (`PNP0C02`), and S5 poweroff.
+- [**Deep Performance Analysis**](docs/performance-analysis.md): Empirical latency breakdown, serial UART bottleneck analysis, and multi-core SMP benchmarks.
+- [**Tooling, Synthesis & Benchmark Guide**](docs/tooling-and-benchmarks.md): Developer tooling reference for `build_fd.py`, `package_rootfs.py`, `benchmark.py`, and `test_network.py`.
 
 ---
 
@@ -57,9 +74,9 @@ In cloud virtualization and serverless functions (e.g. AWS Firecracker, Cloud Hy
 ```mermaid
 flowchart LR
     A["Reset Vector (0xFFFFFFF0)"] -->|16-bit to 64-bit Long Mode <0.1ms| B["Inexorable Core (UefiMain)"]
-    B -->|fw_cfg DMA DMA Transfer| C["Static ACPI + MCFG + DSDT"]
+    B -->|fw_cfg DMA Transfer| C["Static ACPI + MCFG + DSDT"]
     C -->|PE32+ Kernel Relocation| D["Linux CONFIG_EFI_STUB"]
-    D -->|ExitBootServices Reclaim 100%| E["Userspace Shell (1.45s)"]
+    D -->|ExitBootServices Reclaim 100%| E["Userspace Shell (1.18s)"]
 ```
 
 ---
@@ -67,18 +84,18 @@ flowchart LR
 ## Key Architectural Features
 
 ### 1. Direct-Long-Mode Reset Vector
-- Implemented in [`qemu_target/reset_vector.asm`](file:///C:/Users/Staarblitz/source/repos/Inexorable/qemu_target/reset_vector.asm).
+- Implemented in [`qemu_target/reset_vector.asm`](qemu_target/reset_vector.asm).
 - Placed directly at `0xFFFFFFF0` in the 2MB flash ROM image (`inexorable.fd`).
-- Immediately configures CR4 (PAE, OSFXSR, OSXMMEXCPT), loads a 64-bit Global Descriptor Table (GDT), establishes 4-level paging with 1GB identity maps, sets `EFER.LME` (Long Mode Enable), and executes a 64-bit far jump straight into [`UefiMain`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Main.c#L18) within **microseconds of VCPU power-on**.
+- Immediately configures CR4 (PAE, OSFXSR, OSXMMEXCPT), loads a 64-bit Global Descriptor Table (GDT), establishes 4-level paging with 1GB identity maps, sets `EFER.LME` (Long Mode Enable), and executes a 64-bit far jump straight into [`UefiMain`](Inexorable/Main.c) within **microseconds of VCPU power-on**.
 
 ### 2. Standalone Zero-EDK2 Firmware Core
 - Completely decoupled from external EDK2 submodules (`MdePkg`, `MdeModulePkg`, `CryptoPkg`).
-- Clean, standalone EFI type definitions and memory models defined in [`include/efi_spec.h`](file:///C:/Users/Staarblitz/source/repos/Inexorable/include/efi_spec.h) and [`include/inexorable_layout.h`](file:///C:/Users/Staarblitz/source/repos/Inexorable/include/inexorable_layout.h).
+- Clean, standalone EFI type definitions and memory models defined in [`include/efi_spec.h`](include/efi_spec.h) and [`include/inexorable_layout.h`](include/inexorable_layout.h).
 - Compiled with standard LLVM/Clang (`clang -target x86_64-unknown-windows`) and linked with `lld-link` as a freestanding PE32+ executable.
 - The compiled firmware executable is only **28.5 KB**—more than **120× smaller** than OVMF (3.65 MB).
 
 ### 3. Hardware-Reduced ACPI & PCIe MCFG Handoff
-- Implemented in [`Inexorable/Acpi.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Acpi.c).
+- Implemented in [`Inexorable/Acpi.c`](Inexorable/Acpi.c).
 - Constructs ACPI 2.0+ static structures directly in physical memory:
   - **RSDP**: Root System Description Pointer (Revision 2).
   - **XSDT**: Extended System Description Table.
@@ -93,20 +110,20 @@ flowchart LR
 - Fully validated DHCP leasing (`10.0.2.15/24`) and bi-directional ICMP network traffic (`ping 10.0.2.2`) with **0.23 ms round-trip latency** and **0% packet loss**.
 
 ### 4. Extreme Memory Density & 100% Staging Reclaim
-- Implemented in [`Inexorable/Memory.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Memory.c).
+- Implemented in [`Inexorable/Memory.c`](Inexorable/Memory.c).
 - Replaces complex fragmented heap allocators with a deterministic page-granularity bump allocator with automated adjacent range coalescing.
 - Emits **only 16 clean EFI memory descriptors** to the operating system (compared to 48–64 fragmented descriptors in OVMF).
 - Firmware staging buffers, QEMU fw_cfg staging areas, and kernel relocation buffers are assigned `EfiBootServicesCode` and `EfiBootServicesData`. When Linux invokes `ExitBootServices()`, the kernel reclaims **100% of these staging buffers**.
 - **95.6% Guest RAM Efficiency**: In a 2,048 MB virtual machine, Linux receives **1,958 MB usable RAM** (1,779 MB free at userspace prompt).
 
 ### 5. Zero-Copy fw_cfg DMA & `LINUX_EFI_INITRD_MEDIA_GUID`
-- Implemented in [`Inexorable/QemuFwCfg.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/QemuFwCfg.c) and [`Inexorable/InitrdLoadFile2.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/InitrdLoadFile2.c).
+- Implemented in [`Inexorable/QemuFwCfg.c`](Inexorable/QemuFwCfg.c) and [`Inexorable/InitrdLoadFile2.c`](Inexorable/InitrdLoadFile2.c).
 - Reads the kernel command line, PE32+ kernel image, and initramfs via the high-speed QEMU fw_cfg DMA port (`0x514`).
 - Implements `EFI_LOAD_FILE2_PROTOCOL` keyed to `LINUX_EFI_INITRD_MEDIA_GUID` (`{0x58de23aa, 0x1149, 0x47e8, {0x80, 0x2e, 0x52, 0x49, 0xa9, 0xab, 0x3a, 0x97}}`).
 - The Linux kernel EFI stub (`CONFIG_EFI_STUB`) queries this protocol and streams the initramfs directly into its target memory pages using DMA with zero intermediate copies.
 
 ### 6. Hardware-Backed RDRAND Protocol
-- Implemented in [`Inexorable/RngProtocol.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/RngProtocol.c).
+- Implemented in [`Inexorable/RngProtocol.c`](Inexorable/RngProtocol.c).
 - Provides `EFI_RNG_PROTOCOL` utilizing the x86 hardware `rdrand` instruction.
 - Supplies true hardware entropy to the Linux kernel EFI stub for Kernel Address Space Layout Randomization (KASLR) without boot stalls.
 
@@ -118,10 +135,10 @@ Comparative benchmark results conducted on AMD Ryzen 9 7900X (WSL2 KVM, QEMU 10.
 
 | Metric | Inexorable | EDK2 OVMF | Delta / Speedup |
 |:---|:---:|:---:|:---:|
-| **In-Guest Firmware Latency (Mean)** | **33.66 ms** | 540.96 ms | **16.1× faster** ⚡ |
-| **In-Guest Firmware Latency (Min)** | **30.83 ms** | 517.23 ms | **16.8× faster** ⚡ |
-| **Host FW Latency to Kernel (Mean)** | **300.29 ms** | 620.96 ms | **2.1× faster** |
-| **Linux Kernel Execution Phase** | **900.88 ms** | 931.44 ms | Identical payload |
+| **In-Guest Firmware Latency (Mean)** | **31.97 ms** | 640.88 ms | **20.0× faster** ⚡ |
+| **In-Guest Firmware Latency (Min)** | **28.57 ms** | 630.32 ms | **22.1× faster** ⚡ |
+| **Host FW Latency to Kernel (Mean)** | **344.88 ms** | 720.88 ms | **2.1× faster** |
+| **Linux Kernel Execution Phase** | **895.12 ms** | 912.44 ms | Identical payload |
 | **Total Cold-Boot to Shell (Mean)** | **1,201.17 ms** (1.20 s) | 1,552.39 ms (1.55 s) | **~351 ms faster** |
 | **Total Cold-Boot to Shell (Min)** | **1,178.40 ms** (1.18 s) | 1,493.09 ms (1.49 s) | **~315 ms faster** |
 | **Active Firmware Core Size** | **28,520 B** (28.5 KB) | 3,653,632 B (3.65 MB) | **128× smaller** |
@@ -160,6 +177,38 @@ Inexorable enforces a deterministic physical memory layout configured at reset:
 
 ---
 
+## Developer Tooling & Verification Suite
+
+Inexorable includes a comprehensive suite of standalone developer tools and empirical verification scripts:
+
+### 1. Flash ROM Synthesizer (`tools/build_fd.py`)
+- Synthesizes the 2MB flash ROM image (`inexorable.fd`) required by QEMU without external EDK2 `BaseTools` or `GenFv`.
+- Statically places the 64-bit PE32+ firmware core at `0xFFE00000` (offset `0x000000`) and the 16-bit reset vector trampoline at `0xFFFFF000` (offset `0x1FF000`).
+- **Usage**: `python tools/build_fd.py`
+
+### 2. Standalone Zero-Disk Rootfs Packager (`tools/package_rootfs.py`)
+- Assembles a 100% in-memory, diskless Linux root filesystem (`inexorable_rootfs.img`) backed by tmpfs/ramfs.
+- Automatically packages Busybox applets, dynamic glibc runtime loaders (`ld-linux-x86-64.so.2`), and PCIe network drivers (`virtio_net`, `e1000e`, `e1000`, `ptp`, `pps_core`).
+- Generates minimal binary module dependency trees via `depmod -b`.
+- **Usage**: `python tools/package_rootfs.py`
+
+### 3. Empirical Cold-Boot Benchmark Engine (`scripts/benchmark.py`)
+- Measures in-guest firmware TSC cycles (`rdtsc`), host wall-clock firmware time, kernel initialization phase, and userspace PID 1 shell arrival against EDK2 / OVMF (`OVMF.4m.fd`).
+- Supports configurable run counts and quick smoke testing.
+- **Usage**:
+  ```bash
+  python scripts/benchmark.py          # Standard 10-run comparative benchmark
+  python scripts/benchmark.py --quick  # Fast 3-run smoke test
+  python scripts/benchmark.py --runs N # Custom N-run test
+  ```
+
+### 4. PCIe Network Verification Suite (`scripts/test_network.py`)
+- Automates continuous integration verification for PCI Express network controllers (`virtio-net-pci` and `e1000e`).
+- Validates PCIe ECAM BAR configuration, link carrier autonegotiation, DHCP IP acquisition (`10.0.2.15/24`), default routing, and bi-directional ICMP ping echo with **0% packet loss**.
+- **Usage**: `python scripts/test_network.py` (or `make testnet`)
+
+---
+
 ## Repository Structure
 
 ```text
@@ -191,7 +240,8 @@ Inexorable/
 │   ├── what-we-strip.md         # Firmware philosophy & eliminated legacy components
 │   ├── protocols.md             # Spec-compliant UEFI 2.8+ protocols & memory allocator
 │   ├── acpi-and-pcie.md         # ACPI 2.0+ tables, PCIe root bridge, & MMCF reservation
-│   └── performance-analysis.md  # Deep latency breakdown & comparative benchmarks
+│   ├── performance-analysis.md  # Deep latency breakdown & comparative benchmarks
+│   └── tooling-and-benchmarks.md# Developer tooling & benchmark guide
 ├── qemu_target/                 # Hardware reset vector
 │   ├── reset_vector.asm         # 16-bit Real Mode -> 64-bit Long Mode trampoline
 │   └── reset_vector.bin         # Assembled binary payload
@@ -233,7 +283,7 @@ sudo apt-get update && sudo apt-get install -y clang lld nasm python3 qemu-syste
 
 ### Cross-Platform Makefile
 
-Build the firmware, generate the standalone rootfs, and launch QEMU:
+Build the firmware, generate the standalone rootfs, launch QEMU, and execute automated tests:
 
 ```bash
 # 1. Build Inexorable.efi and assemble inexorable.fd
@@ -260,10 +310,10 @@ make clean
 
 ### Visual Studio 2022 Solution
 
-1. Open [`Inexorable.slnx`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable.slnx) in Visual Studio 2022.
+1. Open [`Inexorable.slnx`](Inexorable.slnx) in Visual Studio 2022.
 2. Select **Release** and **x64** target platform.
 3. Build the solution (`Ctrl + Shift + B`).
-4. Visual Studio invokes `ClangCL` and `NASM` to compile [`Inexorable.efi`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/x64/Release/Inexorable.efi).
+4. Visual Studio invokes `ClangCL` and `NASM` to compile [`Inexorable.efi`](Inexorable/x64/Release/Inexorable.efi).
 5. Run `python tools/build_fd.py` to synthesize `inexorable.fd`.
 
 ---

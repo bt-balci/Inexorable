@@ -2,7 +2,7 @@
 
 This document details Inexorable's **Hardware-Reduced ACPI 2.0+** implementation, **PCIe MCFG ECAM handoff**, and out-of-the-box **VirtIO device enablement**.
 
-Source code: [`Inexorable/Acpi.c`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Acpi.c)
+Source code: [`Inexorable/Acpi.c`](../Inexorable/Acpi.c)
 
 ---
 

@@ -38,13 +38,13 @@ flowchart TD
 
 ## 2. Phase 1: 16-Bit Real Mode to 64-Bit Long Mode Transition
 
-Standard UEFI implementations start in Real Mode, transition to 32-bit Protected Mode for SEC and PEI, and only enter 64-bit Long Mode much later during DXE. Inexorable executes this entire transition within **microseconds** directly inside [`qemu_target/reset_vector.asm`](file:///C:/Users/Staarblitz/source/repos/Inexorable/qemu_target/reset_vector.asm).
+Standard UEFI implementations start in Real Mode, transition to 32-bit Protected Mode for SEC and PEI, and only enter 64-bit Long Mode much later during DXE. Inexorable executes this entire transition within **microseconds** directly inside [`qemu_target/reset_vector.asm`](../qemu_target/reset_vector.asm).
 
 ### Reset Vector (`0xFFFFFFF0`)
 When an x86 processor powers on or resets, execution begins at `CS:IP = F000:FFF0` (physical linear address `0xFFFFFFF0`).
 1. **Disable Interrupts**: `cli` and `cld` ensure a deterministic execution state.
 2. **Load Flat GDT**: Uses `lgdt [cs:gdtr]` referencing a pre-baked descriptor table embedded in ROM. All descriptors have the *Accessed* bit pre-set (`0x9B` and `0x93`) to prevent CPU write faults when running in read-only ROM mappings under hardware hypervisors (Intel VT-x / AMD-V).
-3. **Enable Protected Mode**: Sets `CR0.PE = 1` and executes a 32-bit far jump to [`ProtMode32`](file:///C:/Users/Staarblitz/source/repos/Inexorable/qemu_target/reset_vector.asm#L99).
+3. **Enable Protected Mode**: Sets `CR0.PE = 1` and executes a 32-bit far jump to [`ProtMode32`](../qemu_target/reset_vector.asm#L99).
 
 ### 4-Level Identity Paging Construction
 At `ProtMode32`, Inexorable establishes a 4-level paging hierarchy mapping the entire 4GB physical address space using **1GB huge pages**:
@@ -60,7 +60,7 @@ At `ProtMode32`, Inexorable establishes a 4-level paging hierarchy mapping the e
 - Enables Long Mode in the Extended Feature Enable Register: `IA32_EFER MSR (0xC0000080)` bit 8 (`LME = 1`).
 - Loads `CR3` with PML4 physical base `0x1000`.
 - Enables paging: `CR0.PG = 1`.
-- Executes a 64-bit far jump into [`LongMode64`](file:///C:/Users/Staarblitz/source/repos/Inexorable/qemu_target/reset_vector.asm#L167).
+- Executes a 64-bit far jump into [`LongMode64`](../qemu_target/reset_vector.asm#L167).
 
 ---
 
@@ -70,13 +70,13 @@ Once running in 64-bit Long Mode:
 1. **Stack Initialization**: Reloads 64-bit data selectors and points `RSP` to `0x00080000` (safe low conventional memory).
 2. **Early UART Initialization**: Configures COM1 (16550 UART at port `0x3F8`) for 115,200 baud (divisor 1, 8N1, FIFO enabled) for early debug output.
 3. **Payload Copy**: Copies the 512KB pre-mapped firmware payload from ROM (`0xFFE00000`) into RAM (`0x40000000`) using 64-bit `rep movsq`.
-4. **PE Header Parsing & Dispatch**: Reads `e_lfanew` and `AddressOfEntryPoint` from the mapped PE32+ header at `0x40000000` and jumps directly into [`UefiMain()`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Main.c#L18).
+4. **PE Header Parsing & Dispatch**: Reads `e_lfanew` and `AddressOfEntryPoint` from the mapped PE32+ header at `0x40000000` and jumps directly into [`UefiMain()`](../Inexorable/Main.c#L18).
 
 ---
 
 ## 4. Phase 3: Hardware Discovery & Protocol Setup
 
-Inside [`UefiMain()`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/Main.c#L18), Inexorable sets up the bare-metal EFI runtime:
+Inside [`UefiMain()`](../Inexorable/Main.c#L18), Inexorable sets up the bare-metal EFI runtime:
 
 ### 1. High-Speed DMA via QEMU fw_cfg
 - Probes port `0x510` for signature `"QEMU"`.
@@ -106,7 +106,7 @@ Inside [`UefiMain()`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexor
 
 ## 5. Phase 4: PE Loader & Direct Long Mode Kernel Handover
 
-1. **PE Parsing**: [`IxLoadPeImage()`](file:///C:/Users/Staarblitz/source/repos/Inexorable/Inexorable/PeLoader.c#L103) inspects the kernel image staged at `0x40100000`.
+1. **PE Parsing**: [`IxLoadPeImage()`](../Inexorable/PeLoader.c#L103) inspects the kernel image staged at `0x40100000`.
 2. **Page Allocation**: Allocates contiguous pages of `EfiBootServicesCode` at GPA `0x00100000` matching `SizeOfImage`.
 3. **Section Mapping**: Copies each PE section (`.setup`, `.text`, `.data`, `.rodata`) to its corresponding `VirtualAddress` using inline vectorized `rep movsb`.
 4. **Relocation Processing**: Traverses `.reloc` base relocations (`IMAGE_REL_BASED_DIR64` and `IMAGE_REL_BASED_HIGHLOW`) and adjusts pointers relative to the allocated base.

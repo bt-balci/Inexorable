@@ -15,11 +15,22 @@ import time
 import subprocess
 import statistics
 
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def to_wsl_path(win_path):
+    if sys.platform != "win32":
+        return os.path.abspath(win_path)
+    p = os.path.abspath(win_path).replace("\\", "/")
+    if len(p) >= 2 and p[1] == ":":
+        drive = p[0].lower()
+        return f"/mnt/{drive}{p[2:]}"
+    return p
+
 NUM_RUNS = 10
-INEXORABLE_FD = "/mnt/c/Users/Staarblitz/source/repos/Inexorable/inexorable.fd"
+INEXORABLE_FD = to_wsl_path(os.path.join(REPO_ROOT, "inexorable.fd"))
 OVMF_FD = "/usr/share/edk2/x64/OVMF.4m.fd"
 KERNEL_PATH = "/boot/vmlinuz-linux"
-INITRD_PATH = "/mnt/c/Users/Staarblitz/source/repos/Inexorable/inexorable_rootfs.img"
+INITRD_PATH = to_wsl_path(os.path.join(REPO_ROOT, "inexorable_rootfs.img"))
 
 CMDLINE = (
     "console=ttyS0 earlycon=uart8250,io,0x3f8 quiet loglevel=3 "
@@ -58,8 +69,13 @@ def run_qemu(bios, is_inexorable=True):
         "-no-reboot"
     ]
 
+    if sys.platform == "win32":
+        full_cmd = ["wsl", "-d", "archlinux", "-e"] + cmd
+    else:
+        full_cmd = cmd
+
     t_start = time.perf_counter()
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+    proc = subprocess.Popen(full_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     
     t_kernel_entry = None
     t_userspace = None
@@ -112,6 +128,15 @@ def run_qemu(bios, is_inexorable=True):
     return in_guest_fw_ms, host_fw_ms, kernel_phase_ms, total_ms
 
 def main():
+    num_runs = NUM_RUNS
+    if "--quick" in sys.argv:
+        num_runs = 3
+    elif "--runs" in sys.argv:
+        try:
+            num_runs = int(sys.argv[sys.argv.index("--runs") + 1])
+        except (ValueError, IndexError):
+            num_runs = NUM_RUNS
+
     print("=====================================================================")
     print("   INEXORABLE vs EDK2 OVMF: EMPIRICAL COLD-BOOT BENCHMARK ENGINE     ")
     print("=====================================================================")
@@ -120,9 +145,9 @@ def main():
     inex_loc = sum(count_lines(d) for d in inex_dirs if os.path.exists(d))
     ovmf_loc_est = 4200000
 
-    inex_bin_size = os.path.getsize(INEXORABLE_FD) if os.path.exists(INEXORABLE_FD) else 2097152
-    ovmf_bin_size = os.path.getsize(OVMF_FD) if os.path.exists(OVMF_FD) else 4194304
-    inex_code_size = os.path.getsize("build/Inexorable.efi") if os.path.exists("build/Inexorable.efi") else 29184
+    inex_bin_size = os.path.getsize(os.path.join(REPO_ROOT, "inexorable.fd")) if os.path.exists(os.path.join(REPO_ROOT, "inexorable.fd")) else 2097152
+    ovmf_bin_size = 4194304
+    inex_code_size = os.path.getsize(os.path.join(REPO_ROOT, "build/Inexorable.efi")) if os.path.exists(os.path.join(REPO_ROOT, "build/Inexorable.efi")) else 29184
 
     print(f"\n[Codebase & Binary Footprint]")
     print(f"  - Inexorable Codebase LOC:      {inex_loc:,} lines")
@@ -132,9 +157,9 @@ def main():
     print(f"  - Inexorable Flash ROM Image:   {inex_bin_size / 1024:.0f} KB")
     print(f"  - EDK2 OVMF Flash ROM Image:    {ovmf_bin_size / 1024:.0f} KB")
 
-    print(f"\n[Benchmarking Inexorable ({NUM_RUNS} runs)]...")
+    print(f"\n[Benchmarking Inexorable ({num_runs} runs)]...")
     inex_g_fw, inex_h_fw, inex_kern, inex_tot = [], [], [], []
-    for r in range(NUM_RUNS):
+    for r in range(num_runs):
         g_fw, h_fw, k_ms, tot = run_qemu(INEXORABLE_FD, is_inexorable=True)
         inex_g_fw.append(g_fw)
         inex_h_fw.append(h_fw)
@@ -142,9 +167,9 @@ def main():
         inex_tot.append(tot)
         print(f"  Run {r+1:2d}: In-Guest FW={g_fw:5.1f} ms | Host FW={h_fw:5.1f} ms | Kernel={k_ms:6.1f} ms | Total={tot:6.1f} ms")
 
-    print(f"\n[Benchmarking EDK2 OVMF ({NUM_RUNS} runs)]...")
+    print(f"\n[Benchmarking EDK2 OVMF ({num_runs} runs)]...")
     ovmf_g_fw, ovmf_h_fw, ovmf_kern, ovmf_tot = [], [], [], []
-    for r in range(NUM_RUNS):
+    for r in range(num_runs):
         g_fw, h_fw, k_ms, tot = run_qemu(OVMF_FD, is_inexorable=False)
         ovmf_g_fw.append(g_fw)
         ovmf_h_fw.append(h_fw)
