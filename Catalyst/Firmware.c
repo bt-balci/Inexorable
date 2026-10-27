@@ -1032,6 +1032,9 @@ GenerateProtocolCallStub(
 
 	//
 	// We are playing smart. Right after vmexit, the RIP now points to the vmcall. After skipping 3 bytes, pointer to PROTOCOL_STUB_CONTEXT. We read it and advance by 8.
+	// TODO: Don't be stupid. Just directly put the structure here. It will be in the cache, unlike a pointer chase I introduced.
+	// But it's 384 bytes though.
+	// Who cares.
 	//
 	*(VOID**)(StubPtr + 8) = (VOID*)CallData;
 

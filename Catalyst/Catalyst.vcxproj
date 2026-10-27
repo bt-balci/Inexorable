@@ -232,6 +232,7 @@
     <ClInclude Include="Memory.h" />
     <ClInclude Include="Vm.h" />
     <ClInclude Include="x86.h" />
+    <ClInclude Include="x86Dumper.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="Context.asm" />

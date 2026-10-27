@@ -56,6 +56,9 @@
     <ClInclude Include="Acpi.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="x86Dumper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <MASM Include="Context.asm">

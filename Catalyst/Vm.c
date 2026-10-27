@@ -12,6 +12,7 @@
 
 __attribute__((aligned(4096))) CATALYST_VIRTUAL_MACHINE g_VmState = { 0 };
 
+
 STATIC
 VOID
 EFIAPI
@@ -172,7 +173,6 @@ DumpVmcs(
 	);
 
 	DebugPrint0402("--- END CONTEXT DUMP ---\n");
-
 #undef DUMP_VMCS_FIELD
 }
 

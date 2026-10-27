@@ -1,70 +1,146 @@
-#include <Uefi.h>
-#include <Library/BaseMemoryLib.h>
-#include <Library/BaseLib.h>
+#include "efi_spec.h"
+#include "Memory.h"
+#include "Serial.h"
 
-#include "Vm.h"
-#include "x86.h"
+BOOLEAN g_BootServicesExited = FALSE;
 
-EFI_STATUS
-EFIAPI
-IxGetNextHighMonotonicCount(
-	OUT UINT32* HighCount
-) {
-	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_GET_NEXT_HIGH_MONO_COUNT, (UINT64)HighCount, 0, 0, 0, 0, 0);
+static inline void outb(UINT16 port, UINT8 val) {
+    __asm__ __volatile__("outb %0, %1" : : "a"(val), "Nd"(port));
 }
 
-VOID
-EFIAPI
-IxResetSystem(
-	IN EFI_RESET_TYPE           ResetType,
-	IN EFI_STATUS               ResetStatus,
-	IN UINTN                    DataSize,
-	IN VOID* ResetData OPTIONAL
-) {
-	__vmx_vmcall(CATALYST_VMCALL_RESET_SYSTEM, (UINT64)ResetType, (UINT64)ResetStatus, (UINT64)DataSize, (UINT64)ResetData, 0, 0);
+static inline void outw(UINT16 port, UINT16 val) {
+    __asm__ __volatile__("outw %0, %1" : : "a"(val), "Nd"(port));
 }
 
-EFI_STATUS
-EFIAPI
-IxExitBootServices(
-	IN EFI_HANDLE	ImageHandle,
-	IN UINTN		MapKey
-) {
-	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_EXIT_BOOT_SERVICES, (UINT64)ImageHandle, MapKey, 0, 0, 0, 0);
+static inline UINT64 rdtsc(void) {
+    UINT32 lo, hi;
+    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((UINT64)hi << 32) | lo;
 }
 
-EFI_STATUS
-EFIAPI
-IxCalculateCrc32(
-	IN VOID*	Data,
-	IN UINTN	DataSize,
-	OUT UINT32* Crc32
+EFI_STATUS EFIAPI IxExitBootServices(
+    IN EFI_HANDLE ImageHandle,
+    IN UINTN      MapKey
 ) {
-	if (Data == NULL) return EFI_INVALID_PARAMETER;
-	if (Crc32 == NULL) return EFI_INVALID_PARAMETER;
-	if (DataSize == 0) return EFI_INVALID_PARAMETER;
+    (void)ImageHandle;
 
-	*Crc32 = CalculateCrc32(Data, DataSize);
+    if (MapKey != g_MemoryMapKey) {
+        SerialPrint("[UEFI] ExitBootServices: MapKey mismatch (passed %u, current %u)\n", MapKey, g_MemoryMapKey);
+        // We log the warning but accept to ensure boot resilience
+    }
 
-	return EFI_SUCCESS;
+    // Disable firmware interrupts
+    __asm__ __volatile__("cli");
+
+    g_BootServicesExited = TRUE;
+    SerialPrint("[UEFI] ExitBootServices: Handing over to OS kernel!\n");
+
+    return EFI_SUCCESS;
 }
 
-VOID
-EFIAPI
-IxCopyMem(
-	IN VOID* Destination,
-	IN VOID* Source,
-	IN UINTN    Length
+VOID EFIAPI IxResetSystem(
+    IN INT32      ResetType,
+    IN EFI_STATUS ResetStatus,
+    IN UINTN      DataSize,
+    IN VOID       *ResetData
 ) {
-	CopyMem(Destination, Source, Length);
+    (void)ResetType;
+    (void)ResetStatus;
+    (void)DataSize;
+    (void)ResetData;
+
+    SerialPrint("[UEFI] ResetSystem requested\n");
+
+    // Standard PCI system reset: write 0x06 to port 0xCF9
+    outb(0xCF9, 0x06);
+
+    // QEMU ACPI poweroff: write 0x2000 to port 0x604
+    outw(0x604, 0x2000);
+
+    // QEMU debug exit: write 0x00 to port 0x501
+    outb(0x501, 0x00);
+
+    // Fallback halt loop
+    while (1) {
+        __asm__ __volatile__("cli; hlt");
+    }
 }
 
-VOID
-EFIAPI
-IxSetMem(
-	IN VOID* Buffer,
-	IN UINTN    Size,
-	IN UINT8    Value
+EFI_STATUS EFIAPI IxStall(
+    IN UINTN Microseconds
 ) {
-	SetMem(Buffer, Size, Value);
+    // 1 microsecond is roughly 2000 to 3000 cycles on modern x86
+    UINT64 Cycles = Microseconds * 2500ULL;
+    UINT64 Start = rdtsc();
+
+    while (rdtsc() - Start < Cycles) {
+        __asm__ __volatile__("pause");
+    }
+
+    return EFI_SUCCESS;
+}
+
+EFI_STATUS EFIAPI IxSetWatchdogTimer(
+    IN UINTN   Timeout,
+    IN UINT64  WatchdogCode,
+    IN UINTN   DataSize,
+    IN CHAR16  *WatchdogData
+) {
+    (void)Timeout;
+    (void)WatchdogCode;
+    (void)DataSize;
+    (void)WatchdogData;
+    return EFI_SUCCESS;
+}
+
+VOID EFIAPI IxCopyMem(
+    IN VOID  *Destination,
+    IN VOID  *Source,
+    IN UINTN Length
+) {
+    UINT8 *d = (UINT8 *)Destination;
+    const UINT8 *s = (const UINT8 *)Source;
+
+    if (d == s || Length == 0) return;
+
+    if (d < s) {
+        while (Length--) *d++ = *s++;
+    } else {
+        d += Length;
+        s += Length;
+        while (Length--) *--d = *--s;
+    }
+}
+
+VOID EFIAPI IxSetMem(
+    IN VOID  *Buffer,
+    IN UINTN Size,
+    IN UINT8 Value
+) {
+    UINT8 *p = (UINT8 *)Buffer;
+    while (Size--) *p++ = Value;
+}
+
+EFI_STATUS EFIAPI IxCalculateCrc32(
+    IN  VOID   *Data,
+    IN  UINTN  DataSize,
+    OUT UINT32 *Crc32
+) {
+    if (Data == NULL || Crc32 == NULL || DataSize == 0) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    const UINT8 *bytes = (const UINT8 *)Data;
+    UINT32 crc = 0xFFFFFFFF;
+
+    for (UINTN i = 0; i < DataSize; i++) {
+        crc ^= bytes[i];
+        for (int j = 0; j < 8; j++) {
+            if (crc & 1) crc = (crc >> 1) ^ 0xEDB88320;
+            else crc >>= 1;
+        }
+    }
+
+    *Crc32 = ~crc;
+    return EFI_SUCCESS;
 }

@@ -1,39 +1,37 @@
-#include <Uefi.h>
-#include "Vm.h"
-#include "x86.h"
+#include "efi_spec.h"
 
-EFI_STATUS
-EFIAPI
-IxGetTime(
-	OUT  EFI_TIME* Time,
-	OUT  EFI_TIME_CAPABILITIES* Capabilities OPTIONAL
+EFI_STATUS EFIAPI IxGetTime(
+    OUT VOID *Time,
+    OUT VOID *Capabilities OPTIONAL
 ) {
-	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_GET_TIME, (UINT64)Time, (UINT64)Capabilities, 0, 0, 0, 0);
+    (void)Time;
+    (void)Capabilities;
+    return EFI_UNSUPPORTED;
 }
 
-EFI_STATUS
-EFIAPI
-IxSetTime(
-	OUT  EFI_TIME* Time
+EFI_STATUS EFIAPI IxSetTime(
+    IN VOID *Time
 ) {
-	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_SET_TIME, (UINT64)Time, 0, 0, 0, 0, 0);
+    (void)Time;
+    return EFI_UNSUPPORTED;
 }
 
-EFI_STATUS
-EFIAPI
-IxGetWakeupTime(
-	OUT BOOLEAN* Enabled,
-	OUT BOOLEAN* Pending,
-	OUT EFI_TIME* Time
+EFI_STATUS EFIAPI IxGetWakeupTime(
+    OUT BOOLEAN *Enabled,
+    OUT BOOLEAN *Pending,
+    OUT VOID    *Time
 ) {
-	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_GET_WAKEUP_TIME, (UINT64)Enabled, (UINT64)Pending, (UINT64)Time, 0, 0, 0);
+    (void)Enabled;
+    (void)Pending;
+    (void)Time;
+    return EFI_UNSUPPORTED;
 }
 
-EFI_STATUS
-EFIAPI
-IxSetWakeupTime(
-	IN  BOOLEAN	Enable,
-	IN  EFI_TIME* Time   OPTIONAL
+EFI_STATUS EFIAPI IxSetWakeupTime(
+    IN BOOLEAN Enable,
+    IN VOID    *Time OPTIONAL
 ) {
-	return (EFI_STATUS)__vmx_vmcall(CATALYST_VMCALL_SET_WAKEUP_TIME, (UINT64)Enable, (UINT64)Time, 0, 0, 0, 0);
+    (void)Enable;
+    (void)Time;
+    return EFI_UNSUPPORTED;
 }

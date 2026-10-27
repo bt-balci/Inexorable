@@ -125,7 +125,7 @@ CopyToGuest(
 
 	//
 	// There's arbitrary read/write exploit because I didn't check the page tables for permission bits.
-	// I can't be bothered. This is for a PoC.
+	// I can't be bothered. This is for a PoC. Everything is RWX anyway.
 	//
 
 	while (BytesRemaining > 0) {

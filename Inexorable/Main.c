@@ -1,333 +1,266 @@
-#include <Uefi.h>
-#include <Base.h>
-#include <Library/BaseMemoryLib.h>
-#include <Library/BaseLib.h>
-#include <Library/PrintLib.h>
-#include <Protocol/GraphicsOutput.h>
-#include <Protocol/LoadedImage.h>
-
-#include "Efi.h"
-#include "Util.h"
-#include "Variable.h"
-#include "Time.h"
-#include "Misc.h"
-#include "VirtualMemory.h"
+#include "efi_spec.h"
+#include "inexorable_layout.h"
+#include "Serial.h"
 #include "Memory.h"
 #include "Protocol.h"
-#include "Elf.h"
-#include "Boot.h"
+#include "Variable.h"
+#include "Acpi.h"
+#include "InitrdLoadFile2.h"
+#include "RngProtocol.h"
+#include "PeLoader.h"
+#include "QemuFwCfg.h"
 
-CONST UINT8 Kernel[] = {
-#embed "../Forge/kernel.bin"
-};
+// External prototypes from Misc.c
+EFI_STATUS EFIAPI IxExitBootServices(EFI_HANDLE ImageHandle, UINTN MapKey);
+VOID EFIAPI IxResetSystem(INT32 ResetType, EFI_STATUS ResetStatus, UINTN DataSize, VOID *ResetData);
+EFI_STATUS EFIAPI IxStall(UINTN Microseconds);
+EFI_STATUS EFIAPI IxSetWatchdogTimer(UINTN Timeout, UINT64 WatchdogCode, UINTN DataSize, CHAR16 *WatchdogData);
+VOID EFIAPI IxCopyMem(VOID *Destination, VOID *Source, UINTN Length);
+VOID EFIAPI IxSetMem(VOID *Buffer, UINTN Size, UINT8 Value);
+EFI_STATUS EFIAPI IxCalculateCrc32(VOID *Data, UINTN DataSize, UINT32 *Crc32);
 
-CHAR8* gEfiCallerBaseName = "BT-BALCI";
+// External prototypes from VirtualMemory.c
+EFI_STATUS EFIAPI IxSetVirtualAddressMap(UINTN MemoryMapSize, UINTN DescriptorSize, UINT32 DescriptorVersion, EFI_MEMORY_DESCRIPTOR *VirtualMap);
+EFI_STATUS EFIAPI IxConvertPointer(UINTN DebugDisposition, VOID **Address);
 
-EFI_SYSTEM_TABLE		gST = { 0 };
-EFI_BOOT_SERVICES	    gBS = { 0 };
-EFI_RUNTIME_SERVICES	gRT = { 0 };
+// External prototypes from Time.c
+EFI_STATUS EFIAPI IxGetTime(VOID *Time, VOID *Capabilities);
+EFI_STATUS EFIAPI IxSetTime(VOID *Time);
+EFI_STATUS EFIAPI IxGetWakeupTime(BOOLEAN *Enabled, BOOLEAN *Pending, VOID *Time);
+EFI_STATUS EFIAPI IxSetWakeupTime(BOOLEAN Enable, VOID *Time);
 
-VOID
-EFIAPI
-BootKernel(
-	VOID
-) {
-	UINT8* MbiBuffer = NULL;
-	gBS.AllocatePool(EfiLoaderData, 4096, (VOID**)&MbiBuffer);
-	SetMem(MbiBuffer, 4096, 0);
+const CHAR8 *gEfiCallerBaseName = "Inexorable";
 
-	UINT32 CurrentOffset = 8;
+IX_HOST_BOOT_INFO *g_HostBootInfo = (IX_HOST_BOOT_INFO *)IX_HOST_BOOT_INFO_BASE;
 
-	ELF64_HEADER* Header = (ELF64_HEADER*)Kernel;
-	if (!(Header->Ident[ElfIdentMagic0] == ELF_MAG0 &&
-		Header->Ident[ElfIdentMagic1] == ELF_MAG1 &&
-		Header->Ident[ElfIdentMagic2] == ELF_MAG2 &&
-		Header->Ident[ElfIdentMagic3] == ELF_MAG3)) {
-		DebugPrint0402("[GUEST] Specified kernel is not a valid ELF file\n");
-		return;
-	}
-
-	if (Header->Machine != EM_X86_64) {
-		DebugPrint0402("[GUEST] Specified kernel is not a x86_64 executable\n");
-		return;
-	}
-
-	if (Header->Ident[ElfIdentVersion] != EV_CURRENT) {
-		DebugPrint0402("[GUEST] Specified kernel has invalid ELF version\n");
-		return;
-	}
-
-	if (Header->Type != ElfTypeRelocatable && Header->Type != ElfTypeExecutable) {
-		DebugPrint0402("[GUEST] Unsupported ELF file\n");
-		return;
-	}
-
-	ELF64_PHDR* Phdrs = (ELF64_PHDR*)((UINT8*)Kernel + Header->Phoff);
-	DebugPrint0402("[GUEST] Loading ELF: Phoff=0x%lx, Phnum=%lu, Entry=0x%lx\n",
-		Header->Phoff, Header->Phnum, Header->Entry);
-
-	for (UINTN i = 0; i < Header->Phnum; i++) {
-		DebugPrint0402("[GUEST] Segment %lu: Type=0x%x, Offset=0x%lx, Vaddr=0x%lx, Paddr=0x%lx, "
-			"FileSize=0x%lx, MemSize=0x%lx, Align=0x%lx\n",
-			i, Phdrs[i].Type, Phdrs[i].Offset, Phdrs[i].Vaddr, Phdrs[i].Paddr,
-			Phdrs[i].FileSize, Phdrs[i].MemSize, Phdrs[i].Align);
-
-		if (Phdrs[i].Type == PT_LOAD) {
-
-			UINTN Pages = EFI_SIZE_TO_PAGES(Phdrs[i].MemSize);
-			EFI_PHYSICAL_ADDRESS TargetAddress = Phdrs[i].Paddr;
-
-			DebugPrint0402("[GUEST] Segment %lu is PT_LOAD. Pages=%lu, TargetAddress=0x%p\n",
-				i, Pages, TargetAddress);
-
-			//
-			// Force allocation at the exact physical address
-			//
-			EFI_STATUS Status = gBS.AllocatePages(
-				AllocateAddress,
-				EfiLoaderData,
-				Pages,
-				&TargetAddress
-			);
-
-			if (EFI_ERROR(Status)) {
-				DebugPrint0402("[GUEST] 0x%p mark is not empty. Cannot load kernel here\n", Phdrs[i].Paddr);
-				return;
-			}
-
-			UINT8* Dest = (UINT8*)TargetAddress;
-			UINT8* Src = ((UINT8*)Kernel + Phdrs[i].Offset);
-			DebugPrint0402("[GUEST] Copying segment %lu: Src=0x%p, Dest=0x%p, FileSize=0x%lx\n",
-				i, Src, Dest, Phdrs[i].FileSize);
-			CopyMem(Dest, Src, Phdrs[i].FileSize);
-
-			//
-			// Zero BSS
-			//
-			if (Phdrs[i].MemSize > Phdrs[i].FileSize) {
-				UINTN BssSize = Phdrs[i].MemSize - Phdrs[i].MemSize;
-				SetMem(Dest + Phdrs[i].FileSize, BssSize, 0);
-			}
-
-			DebugPrint0402("[GUEST] Segment %lu loaded successfully at 0x%p\n", i, Dest);
-			continue;
-		}
-
-		DebugPrint0402("[GUEST] Segment %lu is not PT_LOAD (type=0x%x), skipping.\n", i, Phdrs[i].Type);
-	}
-
-	UINTN MemoryMapSize = 0;
-	EFI_MEMORY_DESCRIPTOR* Descriptors = NULL;
-	UINTN MapKey = 0;
-	UINTN DescriptorSize = 0;
-	UINT32 DescriptorVersion = 0;
-	if (gBS.GetMemoryMap(&MemoryMapSize, Descriptors, &MapKey, &DescriptorSize, &DescriptorVersion) != EFI_BUFFER_TOO_SMALL) {
-		DebugPrint0402("[GUEST] WHAT\n");
-		return;
-	}
-
-	DebugPrint0402("[GUEST] DescriptorSize = 0x%p, DescriptorVersion = %d, MemoryMapSize = 0x%p",
-		DescriptorSize, DescriptorVersion, MemoryMapSize);
-
-	//
-	// Allocation may change size.
-	//
-	MemoryMapSize += DescriptorSize * 4;
-
-	EFI_STATUS Status = gBS.AllocatePool(EfiRuntimeServicesData, MemoryMapSize, (VOID**)&Descriptors);
-	if (EFI_ERROR(Status)) {
-		DebugPrint0402("[GUEST] Cannot allocate memory for memory map descriptors %r\n", Status);
-		return;
-	}
-
-	DebugPrint0402("[GUEST] Allocated descriptor buffer 0x%p at 0x%p",
-		MemoryMapSize, Descriptors);
-
-	Status = gBS.GetMemoryMap(&MemoryMapSize, Descriptors, &MapKey, &DescriptorSize, &DescriptorVersion);
-	if (EFI_ERROR(Status)) {
-		DebugPrint0402("[GUEST] Cannot get memory map descriptors %r\n", Status);
-		return;
-	}
-
-	gBS.ExitBootServices(0, MapKey);
-
-	DebugPrint0402("[GUEST] Kernel dynamically mapped successfully\n");
-
-	/*
-	MULTIBOOT2_TAG_ELF_SECTIONS* ElfTag = (MULTIBOOT2_TAG_ELF_SECTIONS*)(MbiBuffer + CurrentOffset);
-	ElfTag->Type = MULTIBOOT_TAG_TYPE_ELF_SECTIONS;
-	ElfTag->Size = ElfTagSize;
-	ElfTag->Num = Header->Shnum;
-	ElfTag->Entsize = Header->Shentsize;
-	ElfTag->Shndx = Header->Shstrndx;
-
-	DebugPrint0402("[GUEST] ElfTag at 0x%p, Type=0x%x, Size=%d, Num=%d, Entsize=%d, Shndx=%d\n",
-		ElfTag, ElfTag->Type, ElfTag->Size, ElfTag->Num, ElfTag->Entsize, ElfTag->Shndx);
-
-	UINT8* RawSections = (UINT8*)Kernel + Header->Shoff;
-	gBS.CopyMem(ElfTag->Sections, RawSections, SectionsTotalSize);
-
-	DebugPrint0402("[GUEST] Copied %d bytes of ELF sections from 0x%p to 0x%p\n",
-		SectionsTotalSize, RawSections, ElfTag->Sections);
-
-	CurrentOffset += ALIGN_UP_8(ElfTagSize);
-	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
-	*/
-
-	MULTIBOOT2_TAG_MMAP* MmapTag = (MULTIBOOT2_TAG_MMAP*)(MbiBuffer + CurrentOffset);
-	MmapTag->Type = MULTIBOOT_TAG_TYPE_MMAP;
-	MmapTag->EntrySize = sizeof(MULTIBOOT_MMAP_ENTRY);
-	MmapTag->EntryVersion = 0;
-
-	DebugPrint0402("[GUEST] MmapTag at 0x%p, Type=0x%p, EntrySize=%d, EntryVersion=%d\n",
-		MmapTag, MmapTag->Type, MmapTag->EntrySize, MmapTag->EntryVersion);
-
-	UINT32 MmapEntryCount = 0;
-	UINTN NumEntries = MemoryMapSize / DescriptorSize;
-
-	DebugPrint0402("[GUEST] MemoryMapSize=%d, DescriptorSize=%d, NumEntries=%d\n",
-		MemoryMapSize, DescriptorSize, NumEntries);
-
-	for (UINTN i = 0; i < NumEntries; i++) {
-		EFI_MEMORY_DESCRIPTOR* Desc = (EFI_MEMORY_DESCRIPTOR*)((UINT8*)Descriptors + (i * DescriptorSize));
-
-		UINT32 MbType = MULTIBOOT_MEMORY_RESERVED;
-		
-		//
-		// We only have 2 types of memory :)
-		//
-		if (Desc->Type == EfiConventionalMemory) {
-			MbType = MULTIBOOT_MEMORY_AVAILABLE;
-		}
-		else {
-			MbType = MULTIBOOT_MEMORY_RESERVED;
-		}
-
-		MmapTag->Entries[MmapEntryCount].Address = Desc->PhysicalStart;
-		MmapTag->Entries[MmapEntryCount].Length = Desc->NumberOfPages * 4096;
-		MmapTag->Entries[MmapEntryCount].Type = MbType;
-		MmapTag->Entries[MmapEntryCount].Zero = 0;
-
-		DebugPrint0402("[GUEST] MMAP[%d]: PhysStart=0x%p, Pages=%d, Length=0x%p, EFI_Type=%d -> MB_Type=%d\n",
-			i, Desc->PhysicalStart, Desc->NumberOfPages, Desc->NumberOfPages * 4096, Desc->Type, MbType);
-
-		MmapEntryCount++;
-	}
-
-	DebugPrint0402("[GUEST] Total MmapEntryCount = %d\n", MmapEntryCount);
-
-	UINT32 MmapTagSize = sizeof(MULTIBOOT2_TAG_MMAP) + (MmapEntryCount * sizeof(MULTIBOOT_MMAP_ENTRY));
-	MmapTag->Size = MmapTagSize;
-	DebugPrint0402("[GUEST] MmapTagSize = 0x%p\n", MmapTagSize);
-
-	CurrentOffset += ALIGN_UP_8(MmapTagSize);
-	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
-
-	MULTIBOOT2_TAG_OLD_ACPI* AcpiTag = (MULTIBOOT2_TAG_OLD_ACPI*)(MbiBuffer + CurrentOffset);
-	AcpiTag->Type = MULTIBOOT_TAG_TYPE_ACPI_NEW;
-	AcpiTag->Size = sizeof(*AcpiTag) + 36;
-	AcpiTag->Rsdp = (VOID*)ACPI_RSDP_BASE;
-
-	DebugPrint0402("[GUEST] AcpiTag at 0x%p, Type=0x%p, Size=%d, Rsdp=0x%p\n",
-		AcpiTag, AcpiTag->Type, AcpiTag->Size, AcpiTag->Rsdp);
-
-	CurrentOffset += (ALIGN_UP_8(AcpiTag->Size));
-	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
-
-	MULTIBOOT2_INFO_TAG* EndTag = (MULTIBOOT2_INFO_TAG*)(MbiBuffer + CurrentOffset);
-	EndTag->Type = 0;
-	EndTag->Size = 8;
-
-	DebugPrint0402("[GUEST] EndTag at 0x%p, Type=0, Size=8\n", EndTag);
-
-	CurrentOffset += 8;
-	DebugPrint0402("[GUEST] CurrentOffset after ELF tag = 0x%p\n", CurrentOffset);
-
-	MULTIBOOT2_INFO* FinalMbi = (MULTIBOOT2_INFO*)MbiBuffer;
-	FinalMbi->TotalSize = CurrentOffset;
-	FinalMbi->Reserved = 0;
-
-	DebugPrint0402("[GUEST] Dropping to Protected Mode because Multiboot2 demands so\n");
-	DebugPrint0402("[GUEST] MbiBuffer = 0x%p, 0x%x\n", FinalMbi, FinalMbi->TotalSize);
-	DebugPrint0402("[GUEST] Booting to 0x%p with Multiboot2Info = 0x%p\n", Header->Entry, MbiBuffer);
-
-	Multiboot2Boot((VOID*)Header->Entry, FinalMbi);
+static EFI_STATUS EFIAPI IxConReset(VOID *This, BOOLEAN ExtendedVerification) {
+    (void)This;
+    (void)ExtendedVerification;
+    return EFI_SUCCESS;
 }
 
-VOID
-EFIAPI
-UefiMain(
-	VOID
-) {
-	DebugPrint0402("[GUEST] Inexorable - As if it was always there. (It never was)\n");
+static EFI_STATUS EFIAPI IxConOutputString(VOID *This, CHAR16 *String) {
+    (void)This;
+    if (!String) return EFI_SUCCESS;
+    while (*String) {
+        CHAR16 ch = *String++;
+        if (ch == L'\n') {
+            SerialPutc('\r');
+        }
+        SerialPutc((char)(ch & 0x7F));
+    }
+    return EFI_SUCCESS;
+}
 
-	//
-	// Setup system table.
-	//
-	gST.Hdr.HeaderSize	= sizeof(gST);
-	gST.Hdr.Revision	= EFI_SYSTEM_TABLE_REVISION;
-	gST.Hdr.Signature	= EFI_SYSTEM_TABLE_SIGNATURE;
+static EFI_STATUS EFIAPI IxConClearScreen(VOID *This) {
+    (void)This;
+    return EFI_SUCCESS;
+}
 
-	gST.Hdr.CRC32 = CalculateCrc32(&gST.Hdr, gST.Hdr.HeaderSize);
+#pragma pack(push, 1)
+typedef struct {
+    EFI_STATUS (EFIAPI *Reset)(VOID *This, BOOLEAN ExtendedVerification);
+    EFI_STATUS (EFIAPI *OutputString)(VOID *This, CHAR16 *String);
+    VOID *TestString;
+    VOID *QueryMode;
+    VOID *SetMode;
+    VOID *SetAttribute;
+    EFI_STATUS (EFIAPI *ClearScreen)(VOID *This);
+    VOID *SetCursorPosition;
+    VOID *EnableCursor;
+    VOID *Mode;
+} IX_TEXT_OUTPUT_PROTOCOL;
+#pragma pack(pop)
 
-	gST.BootServices                = &gBS;
-	gST.RuntimeServices             = &gRT;
+static IX_TEXT_OUTPUT_PROTOCOL g_ConOut = {
+    .Reset = IxConReset,
+    .OutputString = IxConOutputString,
+    .TestString = NULL,
+    .QueryMode = NULL,
+    .SetMode = NULL,
+    .SetAttribute = NULL,
+    .ClearScreen = IxConClearScreen,
+    .SetCursorPosition = NULL,
+    .EnableCursor = NULL,
+    .Mode = NULL
+};
 
-	//
-	// Setup runtime services.
-	//
-	gRT.Hdr.HeaderSize	= sizeof(gRT);
-	gRT.Hdr.Revision	= EFI_RUNTIME_SERVICES_REVISION;
-	gRT.Hdr.Signature	= EFI_RUNTIME_SERVICES_SIGNATURE;
+EFI_SYSTEM_TABLE     gST = { 0 };
+EFI_BOOT_SERVICES    gBS = { 0 };
+EFI_RUNTIME_SERVICES gRT = { 0 };
 
-	gRT.Hdr.CRC32 = CalculateCrc32(&gRT.Hdr, gRT.Hdr.HeaderSize);
+static EFI_RT_PROPERTIES_TABLE g_RtProperties = {
+    .Version = 0x0001,
+    .Length  = sizeof(EFI_RT_PROPERTIES_TABLE),
+    .RuntimeServicesSupported = 0x00000000 // Informs Linux no runtime calls needed!
+};
 
-	gRT.GetVariable                 = IxGetVariable;
-	gRT.SetVariable                 = IxSetVariable;
-	gRT.QueryVariableInfo           = IxQueryVariableInfo;
-	gRT.GetNextVariableName         = IxGetNextVariableName;
+static inline UINT64 rdtsc(void) {
+    UINT32 lo, hi;
+    __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+    return ((UINT64)hi << 32) | lo;
+}
 
-	gRT.SetTime                     = IxSetTime;
-	gRT.GetTime                     = IxGetTime;
-	gRT.GetWakeupTime               = IxGetWakeupTime;
-	gRT.SetWakeupTime               = IxSetWakeupTime;
+static EFI_STATUS EFIAPI IxUnsupportedStub(void) {
+    return EFI_UNSUPPORTED;
+}
 
-	gRT.GetNextHighMonotonicCount   = IxGetNextHighMonotonicCount;
-	gRT.ResetSystem                 = IxResetSystem;
+static EFI_TPL EFIAPI IxRaiseTPL(EFI_TPL NewTpl) {
+    (void)NewTpl;
+    return 4; // TPL_APPLICATION
+}
 
-	gRT.SetVirtualAddressMap		= IxSetVirtualAddressMap;
-	gRT.ConvertPointer				= IxConvertPointer;
+static VOID EFIAPI IxRestoreTPL(EFI_TPL OldTpl) {
+    (void)OldTpl;
+}
 
-	//
-	// Setup boot services.
-	//
-	gBS.Hdr.HeaderSize	= sizeof(gBS);
-	gBS.Hdr.Revision	= EFI_BOOT_SERVICES_REVISION;
-	gBS.Hdr.Signature	= EFI_BOOT_SERVICES_SIGNATURE;
+void InexorableInit(void) {
+    UINT64 T0 = rdtsc();
 
-	gBS.Hdr.CRC32 = CalculateCrc32(&gBS.Hdr, gBS.Hdr.HeaderSize);
+    SerialInit();
+    SerialPrint("\n");
+    SerialPrint("====================================================================\n");
+    SerialPrint("   INEXORABLE: Zero-Enumeration Direct-Long-Mode UEFI Firmware\n");
+    SerialPrint("   Lead Architect: Borhan Tugsan Balci (bt-balci)\n");
+    SerialPrint("====================================================================\n");
+    SerialPrint("[TELEMETRY] T0 (Firmware Reset -> Long Mode Entry): %u cycles\n", T0);
 
-	gBS.ExitBootServices			= IxExitBootServices;
+    // Initialize Host Boot Info structure
+    // If not running under custom VMM, detect QEMU and fetch via fw_cfg DMA
+    QemuFwCfgFetchBootInfo();
 
-	gBS.AllocatePages				= IxAllocatePages;
-	gBS.FreePages					= IxFreePages;
+    // 1. Initialize Autonomous Physical Memory Allocator
+    MemoryInit();
 
-	gBS.AllocatePool				= IxAllocatePool;
-	gBS.FreePool					= IxFreePool;
+    // 2. Setup System Table and Services
+    gST.Hdr.Signature = EFI_SYSTEM_TABLE_SIGNATURE;
+    gST.Hdr.Revision = EFI_SYSTEM_TABLE_REVISION;
+    gST.Hdr.HeaderSize = sizeof(EFI_SYSTEM_TABLE);
+    gST.BootServices = &gBS;
+    gST.RuntimeServices = &gRT;
 
-	gBS.GetMemoryMap				= IxGetMemoryMap;
+    // Boot Services
+    gBS.Hdr.Signature = EFI_BOOT_SERVICES_SIGNATURE;
+    gBS.Hdr.Revision = EFI_BOOT_SERVICES_REVISION;
+    gBS.Hdr.HeaderSize = sizeof(EFI_BOOT_SERVICES);
 
-	gBS.CalculateCrc32				= IxCalculateCrc32;
-	gBS.CopyMem						= IxCopyMem;
-	gBS.SetMem						= IxSetMem;
+    VOID **bs_ptrs = (VOID **)&gBS;
+    for (UINTN i = sizeof(EFI_TABLE_HEADER)/sizeof(VOID *); i < sizeof(EFI_BOOT_SERVICES)/sizeof(VOID *); i++) {
+        bs_ptrs[i] = (VOID *)IxUnsupportedStub;
+    }
 
-	gBS.OpenProtocol				= IxOpenProtocol;
-	gBS.LocateProtocol				= IxLocateProtocol;
-	gBS.HandleProtocol				= IxHandleProtocol;
-	gBS.InstallProtocolInterface	= IxInstallProtocolInterface;
+    gBS.RaiseTPL                = IxRaiseTPL;
+    gBS.RestoreTPL              = IxRestoreTPL;
+    gBS.AllocatePages           = IxAllocatePages;
+    gBS.FreePages               = IxFreePages;
+    gBS.GetMemoryMap            = IxGetMemoryMap;
+    gBS.AllocatePool            = IxAllocatePool;
+    gBS.FreePool                = IxFreePool;
+    gBS.ExitBootServices        = IxExitBootServices;
+    gBS.Stall                   = IxStall;
+    gBS.SetWatchdogTimer        = IxSetWatchdogTimer;
+    gBS.CopyMem                 = IxCopyMem;
+    gBS.SetMem                  = IxSetMem;
+    gBS.CalculateCrc32          = IxCalculateCrc32;
 
-	InitializeListHead(&g_ProtocolList);
-	InitializeListHead(&g_HandleList);
-	InitializeListHead(&g_VariableList);
-	BootKernel();
+    gBS.HandleProtocol          = IxHandleProtocol;
+    gBS.OpenProtocol            = (VOID *)IxOpenProtocol;
+    gBS.CloseProtocol           = (VOID *)IxCloseProtocol;
+    gBS.LocateProtocol          = IxLocateProtocol;
+    gBS.LocateHandle            = IxLocateHandle;
+    gBS.LocateHandleBuffer      = (VOID *)IxLocateHandleBuffer;
+    gBS.LocateDevicePath        = (VOID *)IxLocateDevicePath;
+    gBS.InstallProtocolInterface   = (VOID *)IxInstallProtocolInterface;
+    gBS.UninstallProtocolInterface = (VOID *)IxUninstallProtocolInterface;
+    gBS.InstallConfigurationTable  = IxInstallConfigurationTable;
+
+    // Runtime Services
+    gRT.Hdr.Signature = EFI_RUNTIME_SERVICES_SIGNATURE;
+    gRT.Hdr.Revision = EFI_RUNTIME_SERVICES_REVISION;
+    gRT.Hdr.HeaderSize = sizeof(EFI_RUNTIME_SERVICES);
+
+    VOID **rt_ptrs = (VOID **)&gRT;
+    for (UINTN i = sizeof(EFI_TABLE_HEADER)/sizeof(VOID *); i < sizeof(EFI_RUNTIME_SERVICES)/sizeof(VOID *); i++) {
+        rt_ptrs[i] = (VOID *)IxUnsupportedStub;
+    }
+
+    gRT.GetTime                 = (VOID *)IxGetTime;
+    gRT.SetTime                 = (VOID *)IxSetTime;
+    gRT.GetWakeupTime           = (VOID *)IxGetWakeupTime;
+    gRT.SetWakeupTime           = (VOID *)IxSetWakeupTime;
+    gRT.SetVirtualAddressMap    = (VOID *)IxSetVirtualAddressMap;
+    gRT.ConvertPointer          = (VOID *)IxConvertPointer;
+    gRT.GetVariable             = IxGetVariable;
+    gRT.SetVariable             = IxSetVariable;
+    gRT.GetNextVariableName     = IxGetNextVariableName;
+    gRT.QueryVariableInfo       = IxQueryVariableInfo;
+    gRT.ResetSystem             = IxResetSystem;
+
+    // 3. Initialize Protocol and Variable Subsystems
+    ProtocolInit();
+    VariableInit();
+
+    gST.ConsoleOutHandle = (EFI_HANDLE)0x1005;
+    gST.ConOut = &g_ConOut;
+    gST.StandardErrorHandle = (EFI_HANDLE)0x1005;
+    gST.StdErr = &g_ConOut;
+
+    EFI_GUID TextOutGuid = { 0x387477c2, 0x69c7, 0x11d2, { 0x8e, 0x39, 0x00, 0xa0, 0xc9, 0x69, 0x72, 0x3b } };
+    IxInstallProtocolInterface(&gST.ConsoleOutHandle, &TextOutGuid, 0, &g_ConOut);
+
+    // 4. Install EFI_RT_PROPERTIES_TABLE
+    EFI_GUID RtPropertiesGuid = EFI_RT_PROPERTIES_TABLE_GUID;
+    IxInstallConfigurationTable(&RtPropertiesGuid, &g_RtProperties);
+
+    // 5. Build and Install Static Hardware-Reduced ACPI Tables
+    AcpiInit();
+
+    // 6. Install Direct Memory Initrd Protocol (LOAD_FILE2)
+    InitrdProtocolInit();
+
+    // 7. Install Hardware RNG Protocol (rdrand)
+    RngProtocolInit();
+
+    UINT64 T1 = rdtsc();
+    SerialPrint("[TELEMETRY] T1 (Firmware Core & Protocols Ready): %u cycles (+%u cycles from T0)\n",
+        T1, T1 - T0);
+
+    // 8. Load Kernel Image via PE32+ Loader
+    EFI_HANDLE KernelHandle = NULL;
+    EFI_IMAGE_ENTRY_POINT EntryPoint = NULL;
+
+    SerialPrint("[BOOT] Loading 64-bit PE32+ Linux Kernel from GPA 0x%p...\n", GUEST_KERNEL_STAGE_BASE);
+    EFI_STATUS Status = IxLoadPeImage((VOID *)GUEST_KERNEL_STAGE_BASE, &KernelHandle, &EntryPoint);
+    if (EFI_ERROR(Status)) {
+        SerialPrint("[FATAL] IxLoadPeImage failed with status 0x%x\n", Status);
+        while (1) __asm__ __volatile__("cli; hlt");
+    }
+
+    UINT64 T2 = rdtsc();
+    SerialPrint("[TELEMETRY] T2 (Kernel Mapped & Relocated): %u cycles (+%u cycles from T1)\n",
+        T2, T2 - T1);
+
+    SerialPrint("[BOOT] Jumping directly to 64-bit Linux EntryPoint 0x%p in Long Mode...\n", EntryPoint);
+    SerialPrint("--------------------------------------------------------------------\n");
+
+    // Call Linux CONFIG_EFI_STUB entry point directly in Long Mode!
+    // Per Microsoft x64 ABI: arguments are passed in RCX (ImageHandle), RDX (SystemTable)
+    Status = EntryPoint(KernelHandle, &gST);
+
+    SerialPrint("[BOOT] Kernel returned with status: 0x%x\n", Status);
+    while (1) {
+        __asm__ __volatile__("cli; hlt");
+    }
+}
+
+// Entry points satisfying both MSBuild linker and direct jump
+EFI_STATUS EFIAPI UefiMain(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable) {
+    (void)ImageHandle;
+    (void)SystemTable;
+    InexorableInit();
+    return EFI_SUCCESS;
+}
+
+void InexorableMain(void) {
+    InexorableInit();
 }
