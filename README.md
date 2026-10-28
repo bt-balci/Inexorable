@@ -1,13 +1,16 @@
 # Inexorable
 
+> "He who simplifies his boot and removes architectural complexity achieves subsecond boot times."
+
 <div align="center">
 
+[![OSFC 2026 Talk](https://img.shields.io/badge/OSFC%202026-Presented%20in%20Amsterdam-8a2be2?style=flat-square)](https://www.osfc.io/2026/talks/minimalist-uefi-implementation-for-virtual-machines/)
 ![Firmware](https://img.shields.io/badge/Firmware-UEFI%202.8%2B%20Freestanding-blue?style=flat-square)
 ![Architecture](https://img.shields.io/badge/Arch-x86__64%20Direct--Long--Mode-orange?style=flat-square)
 ![Latency](https://img.shields.io/badge/In--Guest%20Firmware%20Latency-~30%20ms-brightgreen?style=flat-square)
 ![Footprint](https://img.shields.io/badge/Core%20Binary-28.5%20KB-purple?style=flat-square)
 ![RAM Density](https://img.shields.io/badge/RAM%20Efficiency-95.6%25-success?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![License](https://img.shields.io/badge/License-GPLv3%20%2F%20Commercial-green?style=flat-square)
 
 **Zero-Enumeration, Direct-Long-Mode Standalone UEFI Firmware for Cloud Hypervisors & MicroVMs**
 
@@ -17,7 +20,7 @@
 
 **Inexorable** is a zero-enumeration, direct-long-mode standalone UEFI firmware engineered from first principles for hypervisors, cloud microVMs, confidential containers, and serverless compute runtimes.
 
-By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire EDK2 driver stack, Inexorable boots the Linux kernel in **28 to 33 ms** in-guest firmware time—**over 20× faster than EDK2 / OVMF**—with a core binary footprint of just **28.5 KB** and **95.6% guest RAM efficiency**.
+Originally introduced on stage at the [**Open Source Firmware Conference (OSFC) 2026**](https://www.osfc.io/2026/talks/minimalist-uefi-implementation-for-virtual-machines/), Inexorable eliminates dynamic hardware discovery, obsolete legacy buses, and the entire 4.2M-line EDK2 driver stack. It boots mainline Linux kernels (`CONFIG_EFI_STUB`) in **28 to 32 ms** of in-guest firmware time—**20× faster than EDK2 / OVMF**—with a core binary footprint of just **28.5 KB** (`3,103 LOC`) and **95.6% guest RAM efficiency**.
 
 ---
 
@@ -40,7 +43,7 @@ By eliminating dynamic hardware discovery, obsolete legacy buses, and the entire
 - [Building & Running](#building--running)
   - [Cross-Platform Makefile](#cross-platform-makefile)
   - [Visual Studio 2022 Solution](#visual-studio-2022-solution)
-- [License & Authors](#license--authors)
+- [License, Commercial Licensing & Enterprise Support](#license-commercial-licensing--enterprise-support)
 
 ---
 
@@ -324,8 +327,17 @@ make clean
 
 ---
 
-## License & Authors
+## License, Commercial Licensing & Enterprise Support
 
-- **Lead Architect & Maintainer**: Borhan Tugsan Balci ([@bt-balci](https://github.com/bt-balci))
-- **Project**: Inexorable MicroVM Firmware
-- **License**: MIT License (or project root license)
+- **Lead Architect & Maintainer**: Borhan Tuğsan Balcı ([@bt-balci](https://github.com/bt-balci))
+- **Conference Paper & Slides**: [OSFC 2026 — *Minimalist UEFI Implementation for Virtual Machines*](https://www.osfc.io/2026/talks/minimalist-uefi-implementation-for-virtual-machines/)
+- **Open-Source License**: GPL-3.0 (see `LICENSE`)
+
+### Commercial Dual-Licensing & Enterprise Editions
+For cloud providers, microVM platforms, and enterprise hypervisor teams deploying Inexorable in proprietary environments, **commercial non-GPL licenses** and custom engineering integrations are available:
+- **Permissive Commercial Binary/Source License** (no copyleft obligations)
+- **Confidential Compute Builds** (AMD SEV-SNP / Intel TDX launch measurement & minimal TCB attestation)
+- **Windows (`bootmgfw.efi`) & Custom Guest OS Boot Loaders**
+- **Custom VMM & Bare-Metal Hypervisor Integration** (QEMU, Cloud Hypervisor, raw KVM)
+
+For commercial licensing, sponsorships, or architecture inquiries, reach out directly at **`borhantugsan@gmail.com`**.
